@@ -14,9 +14,16 @@
 | `NexusSyncServer.Hosting`, `.Ux`, `.Modules.*` | GitHub Packages | authors composing their own image |
 | GitHub Release | this repository | humans, with the whole stack's changes folded in |
 
-All of it comes from **`ci.yml`**. The image builds on every push to `main` and again with a
-version tag; the `release` job runs only on a tag, after `build`, `audit` and `image` have
-passed.
+All of it comes from **`ci.yml`**, and **only a tag publishes anything**. A push to `main` or a
+pull request builds the image as a check and throws it away; the `release` job runs on a tag
+only, after `build`, `audit` and `image` have passed.
+
+Every image in the registry therefore corresponds to a release anybody can look up. Publishing
+on each push filled it with `main` and `sha-…` images nobody asked for, and made "which one is
+released?" a question you answered by reading dates.
+
+`latest` moves only on a stable tag. A prerelease such as `v0.2.0-rc.1` publishes `0.2.0-rc.1`
+and nothing else, so `docker pull …:latest` cannot land on a release candidate by accident.
 
 One workflow on purpose. A separate release workflow would repeat the restore, the build and
 the pack, and the two would drift — the first attempt at this repository had exactly that, and
