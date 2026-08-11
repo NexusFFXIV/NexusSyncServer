@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest a server capability, a new module, or a change to an existing one.
+title: "[Feature]: "
+labels: ["enhancement", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Good ideas welcome. For open-ended brainstorming use [Discussions](https://github.com/NexusFFXIV/NexusSyncServer/discussions) — Issues are best for concrete, scoped proposals.
+
+        Worth knowing before you write: the guiding rule here is that **an author should not have to write server code to store and load data**. A contract is uploaded, and storage, endpoints and permissions follow from it. Proposals that keep that true are much easier to land than ones that add a code path per use case.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What would this touch?
+      options:
+        - Api — the protocol endpoints
+        - Registry — contracts and versioning
+        - Storage — the record store, querying, retention
+        - Auth — login, keys, scopes, limits
+        - Ux — the component kit for admin pages
+        - A new module
+        - Deployment / operations
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      placeholder: |
+        I want to see how many records each collection holds without opening psql.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution (optional)
+      description: Endpoint shape, contract field, UI sketch — whatever fits.
+
+  - type: dropdown
+    id: wire-impact
+    attributes:
+      label: Does this change the wire protocol?
+      description: |
+        Anything altering endpoints, envelopes or the contract model affects every client, including ones we did not write, and belongs in `NexusKit.Sync` first.
+      options:
+        - "No — server-side only"
+        - "Yes — needs a protocol change too"
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched [existing issues](https://github.com/NexusFFXIV/NexusSyncServer/issues?q=is%3Aissue) and discussions for the same idea.
+          required: true

@@ -1,0 +1,139 @@
+@*
+    The landing page.
+
+    A bare list of links would duplicate the header navigation and say nothing. This answers
+    the questions someone actually arrives with: what is this server, what does it speak, how
+    do I get in, and where is the API — all from information the server already has.
+
+    Replace it by mounting your own component at "/" in a UX module and dropping this page.
+*@
+@page "/"
+@using System.Security.Claims
+@using NexusSyncServer.Hosting.Modules
+@using NexusSyncServer.Modules.Auth.Providers
+@using NexusSyncServer.Modules.Registry
+@inject IServiceProvider Services
+@inject IEnumerable<IPortalPageModule> PageModules
+@inject IEnumerable<IIdentityProvider> Providers
+
+<PageTitle>NexusSyncServer</PageTitle>
+
+<div class="nx-card">
+    <h1>NexusSyncServer</h1>
+    <p class="nx-muted">
+        Storage and an API for FINAL FANTASY XIV plugins. A plugin sends what it collects,
+        reads what is curated here, and everything it may do is declared in a contract.
+    </p>
+</div>
+
+<div class="nx-card">
+    <h2>Contracts served here</h2>
+    <p class="nx-muted">
+        The documents themselves are not published — reading one needs a key carrying
+        <code class="nx-mono">contract:pull</code>. Names and versions are shown so you know
+        what to ask for.
+    </p>
+    @if (Registry is null)
+    {
+        <p class="nx-muted">This server was composed without the registry module.</p>
+    }
+    else if (Registry.ContractIds.Count == 0)
+    {
+        <p class="nx-muted">
+            None registered yet. Drop a <code>*.json</code> contract into the mounted
+            <code>/contracts</code> directory and restart.
+        </p>
+    }
+    else
+    {
+        <table class="nx-table">
+            <thead><tr><th>Contract</th><th>Versions</th></tr></thead>
+            <tbody>
+            @* No link to /v1/contracts/{id} any more. That endpoint authenticates with an API
+               key carrying contract:pull, not with a browser session, so following it from
+               here only ever produced a 401.
+
+               And session auth is not the fix: anyone who can sign in could then read every
+               schema on the server, which reduces the gate to "has a Discord account". A key
+               is issued deliberately with chosen scopes; a session only says somebody arrived. *@
+            @foreach (var id in Registry.ContractIds)
+            {
+                <tr>
+                    <td class="nx-mono">@id</td>
+                    <td>@string.Join(", ", Registry.VersionsOf(id).Select(v => v.ToString()))</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+</div>
+
+<div class="nx-card">
+    <h2>Getting a key</h2>
+    @if (SignedIn)
+    {
+        <p>You are signed in as <strong>@UserName</strong>.</p>
+        <a class="nx-btn nx-btn-primary" href="/account/keys">Manage your API keys</a>
+    }
+    else if (Providers.Any())
+    {
+        @* No sign-in button here: the header already carries one, and two buttons doing the
+           same thing on one screen makes a reader wonder whether they differ. *@
+        <p class="nx-muted">
+            Sign in from the header, then create a key and paste it into your plugin's settings.
+        </p>
+    }
+    else
+    {
+        @* Valid, not broken — a small server may issue keys out of band only. *@
+        <p class="nx-muted">
+            No sign-in provider is configured. Keys on this server are issued by the operator.
+        </p>
+    }
+</div>
+
+<div class="nx-card">
+    <h2>Pages</h2>
+    <ul>
+        @foreach (var entry in Pages)
+        {
+            <li><a href="@entry.Route">@entry.Title</a></li>
+        }
+        <li><a href="/">Home</a></li>
+    </ul>
+</div>
+
+<div class="nx-card">
+    <h2>For plugin authors</h2>
+    <p class="nx-muted">
+        Every one of these needs a key. Browser sign-in does not open them: a session only says
+        somebody arrived, while a key was issued deliberately with the scopes it carries.
+    </p>
+    <ul>
+        <li><code>GET /v1/contracts</code> — everything registered here · <code class="nx-mono">contract:pull</code></li>
+        <li><code>GET /v1/contracts/{'{'}contract{'}'}</code> — one canonical document and its hash · <code class="nx-mono">contract:pull</code></li>
+        <li><code>POST /v1/handshake</code> — negotiate, and learn what this key may do</li>
+        <li><code>POST /v1/{'{'}contract{'}'}/{'{'}collection{'}'}/push</code> · the collection's push scope</li>
+        <li><code>GET /v1/{'{'}contract{'}'}/{'{'}collection{'}'}/pull</code> · the collection's pull scope</li>
+    </ul>
+    <p class="nx-muted">
+        Unauthenticated, and the only two:
+        <a href="/health"><code>/health</code></a> and <a href="/ready"><code>/ready</code></a>.
+    </p>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    // Resolved optionally rather than injected: a deployment may compose without the registry,
+    // and the landing page should degrade rather than take the whole site down with it.
+    private IContractRegistry? Registry => Services.GetService<IContractRegistry>();
+
+    private bool SignedIn => Http?.User.Identity?.IsAuthenticated == true;
+    private string? UserName => Http?.User.Identity?.Name;
+
+    private IEnumerable<PortalPage> Pages => PageModules
+        .SelectMany(m => m.Pages)
+        .OrderBy(p => p.Order)
+        .ThenBy(p => p.Title, StringComparer.Ordinal);
+}

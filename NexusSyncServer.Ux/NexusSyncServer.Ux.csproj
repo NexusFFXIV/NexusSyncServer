@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Ux</RootNamespace>
+		<AssemblyName>NexusSyncServer.Ux</AssemblyName>
+		<Description>Component kit for NexusSyncServer pages: layout, scope-aware rendering and form primitives. What you build your own admin pages out of, and what the built-in ones are built from.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>CS1591</NoWarn>
+		<!-- Razor generates partial classes whose XML docs we do not control, and unused
+		     usings in .razor are routine. Keeping warnings-as-errors on here fights the
+		     generator rather than catching anything. -->
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

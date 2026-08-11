@@ -1,0 +1,121 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: nexussyncserver
+      MARIADB_USER: nexussyncserver
+      # Local development defaults. Override both through .env for anything reachable from
+      # outside this machine — compose reads .env automatically and it is gitignored.
+      MARIADB_PASSWORD: ${DB_PASSWORD:-nexussyncserver}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-nexussyncserver}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      # The server's own readiness check waits for this, but depends_on with a condition is
+      # what stops it from racing the database on a cold start and failing its first migration.
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Not published by default. The database has no reason to be reachable from the host —
+    # phpMyAdmin below reaches it over the compose network. Uncomment only if you want to
+    # point a desktop client at it, and comment it back out afterwards.
+    # ports:
+    #   - "3306:3306"
+
+  server:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-0.0.0-local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      Storage__ConnectionString: "Server=db;Port=3306;Database=nexussyncserver;User Id=nexussyncserver;Password=${DB_PASSWORD:-nexussyncserver};"
+
+      # Sign-in providers are off unless configured. A server with neither is still useful —
+      # keys can be issued out of band — so this is a valid state rather than a broken one.
+      Auth__XivAuth__Enabled: "${XIVAUTH_ENABLED:-false}"
+      Auth__XivAuth__ClientId: "${XIVAUTH_CLIENT_ID:-}"
+      Auth__XivAuth__ClientSecret: "${XIVAUTH_CLIENT_SECRET:-}"
+
+      Auth__Discord__Enabled: "${DISCORD_ENABLED:-false}"
+      Auth__Discord__ClientId: "${DISCORD_CLIENT_ID:-}"
+      Auth__Discord__ClientSecret: "${DISCORD_CLIENT_SECRET:-}"
+
+      # provider:subject, e.g. xivauth:12345 — needed once to break the bootstrap circle,
+      # since registering a contract requires an operator and promoting one does too.
+      Auth__OperatorIdentities__0: "${OPERATOR_IDENTITY:-}"
+
+      # Optional unattended provisioning. The key itself is a mounted secret, never an
+      # environment variable — see the secrets block below and Modules/…Auth/docs/api-keys.md.
+      Auth__BootstrapKeyFile: "${BOOTSTRAP_KEY_FILE:-}"
+      Auth__BootstrapKeyScopes__0: "${BOOTSTRAP_KEY_SCOPE_0:-}"
+      Auth__BootstrapKeyContract: "${BOOTSTRAP_KEY_CONTRACT:-}"
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    volumes:
+      # Drop contract .json documents here; they are registered at startup.
+      - ./contracts:/contracts:ro
+
+      # ASP.NET data-protection keys. These sign the sign-in cookie and the antiforgery token
+      # in every form, and by default they live inside the container — so recreating it
+      # invalidates both. The visible symptom is nasty: a page that was open across a redeploy
+      # posts a token signed with keys that no longer exist, and antiforgery answers with an
+      # empty 400 and no log line at all.
+      #
+      # Also what makes more than one replica possible: without a shared volume each would
+      # sign with its own keys and reject the others' cookies.
+      - dataprotection-keys:/home/nexussyncserver/.aspnet/DataProtection-Keys
+
+      # Where credential files come from. A bind mount rather than a compose `secret` so it
+      # behaves the same with plain `docker compose` and without swarm.
+      #
+      # The default is inside the repo because that is what works with no setup — but point
+      # SECRETS_DIR somewhere else for anything real. A credentials folder in a working tree
+      # is one `git add -f`, one archived copy, or one file-sync client away from leaking,
+      # and this project happens to live under a synced drive.
+      #
+      # Nothing here is needed unless Auth__BootstrapKeyFile is set; the folder may be empty
+      # or absent, and Docker creates it on demand.
+      - ${SECRETS_DIR:-./secrets}:/run/secrets:ro
+
+  # Database browser, for looking at what the server actually stored.
+  #
+  # DEVELOPMENT ONLY. This is unauthenticated-by-default administrative access to the whole
+  # database, so the port is bound to 127.0.0.1 and not to every interface — the difference
+  # between "reachable from this machine" and "reachable from the network" is the whole
+  # safety margin here. Delete this service before deploying anywhere real; a production
+  # compose file should not contain it at all.
+  phpmyadmin:
+    image: phpmyadmin:5
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+
+      # Signed in already, so opening the page just shows the data. Supplying credentials
+      # switches phpMyAdmin to `config` auth: no prompt, and no logout button either.
+      #
+      # This is only defensible because the port is bound to 127.0.0.1 — it hands whoever
+      # reaches it full access to this database with no challenge at all. That is the same
+      # access `docker compose exec db` already gives, which is why it costs nothing here
+      # and would be indefensible the moment the binding changed.
+      #
+      # Clear both to get the login prompt back, e.g. to sign in as root and see the system
+      # databases, which this user cannot.
+      PMA_USER: ${PHPMYADMIN_USER:-nexussyncserver}
+      PMA_PASSWORD: ${PHPMYADMIN_PASSWORD:-${DB_PASSWORD:-nexussyncserver}}
+    ports:
+      - "127.0.0.1:${PHPMYADMIN_PORT:-8081}:80"
+
+volumes:
+  mariadb-data:
+  dataprotection-keys:

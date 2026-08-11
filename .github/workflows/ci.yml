@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  # Hardcoded lowercase rather than ${{ github.repository }}. GHCR rejects uppercase in an
+  # image name, and this org's repo is "NexusFFXIV/NexusSyncServer" — the interpolated form would
+  # only work because metadata-action happens to lowercase it for us. Being explicit costs
+  # nothing and removes the dependency on that behaviour.
+  IMAGE_NAME: nexusffxiv/nexussyncserver
+
+jobs:
+  # ubuntu, not the windows runner the plugin repos need: nothing here touches Dalamud, and
+  # the artefact that actually ships is a linux container. Building on the platform we deploy
+  # to is worth more than matching the other repos' runner.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # MinVer needs full history to compute versions
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore NexusSyncServer.sln
+
+      - name: Build
+        run: dotnet build NexusSyncServer.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test NexusSyncServer.sln -c Release --no-build --verbosity normal
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore NexusSyncServer.sln
+
+      - name: Audit NuGet dependencies for known vulnerabilities
+        shell: pwsh
+        run: |
+          $output = dotnet list NexusSyncServer.sln package --vulnerable --include-transitive 2>&1 | Out-String
+          Write-Host $output
+          # Fail if any High/Critical CVE is reachable from our dep tree. This matters more
+          # here than in a library: the server is the part exposed to the network.
+          if ($output -match '\b(High|Critical)\b') {
+            Write-Host "::error::Vulnerable NuGet dependency at High or Critical severity — review the report above and update before merging."
+            exit 1
+          }
+
+      - name: List outdated NuGet dependencies (informational)
+        continue-on-error: true
+        run: dotnet list NexusSyncServer.sln package --outdated --include-transitive
+
+  # The image is built on every PR too, not only on tags. A Dockerfile that stopped working
+  # should fail in review rather than at release time, when it blocks a deployment.
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Derive assembly version
+        id: version
+        shell: bash
+        run: |
+          # The Dockerfile cannot run MinVer — .git is not in the build context — so the
+          # version is passed in. On a tag it is the release version with the `v` stripped,
+          # matching what MinVer would have produced. Off a tag it is deliberately marked as
+          # a build rather than left at 0.0.0, which reads like a real release.
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=0.0.0-ci.${GITHUB_RUN_NUMBER}+${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare NuGet credentials for the build
+        shell: bash
+        run: |
+          # NexusKit.Sync comes from GitHub Packages, which needs auth even for public
+          # packages. Written to a file and passed as a BuildKit secret, so the token never
+          # becomes an image layer or shows up in `docker history`.
+          cat > nuget.auth.config <<'CONFIG'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+              <add key="nexusffxiv" value="https://nuget.pkg.github.com/NexusFFXIV/index.json" />
+            </packageSources>
+            <packageSourceCredentials>
+              <nexusffxiv>
+                <add key="Username" value="GITHUB_ACTOR_PLACEHOLDER" />
+                <add key="ClearTextPassword" value="GITHUB_TOKEN_PLACEHOLDER" />
+              </nexusffxiv>
+            </packageSourceCredentials>
+          </configuration>
+          CONFIG
+          sed -i "s|GITHUB_ACTOR_PLACEHOLDER|${{ github.actor }}|; s|GITHUB_TOKEN_PLACEHOLDER|${{ secrets.GITHUB_TOKEN }}|" nuget.auth.config
+
+      - name: Build (and push outside PRs)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          # metadata-action emits org.opencontainers.image.source among these, which is what
+          # links the package to this repo on GitHub — without it the package page shows up
+          # orphaned, with no README and no way back to the source.
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+          # secret-files, not secrets: the latter takes inline values, this one takes a path.
+          secret-files: |
+            nuget_auth=${{ github.workspace }}/nuget.auth.config
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Shred the credential file
+        if: always()
+        run: rm -f nuget.auth.config
+
+  release:
+    needs: [ build, audit, image ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed for creating GitHub Releases on tag push
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack
+        run: dotnet pack NexusSyncServer.sln -c Release -o ./artifacts
+
+      - name: Push to GitHub Packages
+        shell: pwsh
+        run: |
+          dotnet nuget add source --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text --name github "https://nuget.pkg.github.com/NexusFFXIV/index.json"
+          Get-ChildItem ./artifacts -Filter *.nupkg | ForEach-Object {
+            dotnet nuget push $_.FullName --source github --skip-duplicate
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: nupkgs
+          path: ./artifacts/*.nupkg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ github.ref_name }}
+          files: |
+            ./artifacts/*.nupkg
+            ./artifacts/*.snupkg
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}

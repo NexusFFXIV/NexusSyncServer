@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Modules.Api</RootNamespace>
+		<AssemblyName>NexusSyncServer.Modules.Api</AssemblyName>
+		<Description>The NexusSyncServer sync endpoints: handshake, push, pull and contract discovery, with scope enforcement and RFC 9457 problem responses.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+		<ProjectReference Include="..\NexusSyncServer.Modules.Auth\NexusSyncServer.Modules.Auth.csproj" />
+		<ProjectReference Include="..\NexusSyncServer.Modules.Registry\NexusSyncServer.Modules.Registry.csproj" />
+		<ProjectReference Include="..\NexusSyncServer.Modules.Storage.MariaDb\NexusSyncServer.Modules.Storage.MariaDb.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="NexusKit.Sync" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

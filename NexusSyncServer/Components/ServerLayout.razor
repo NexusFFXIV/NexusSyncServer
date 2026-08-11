@@ -1,0 +1,50 @@
+@*
+    The default layout: NexusPageLayout from the kit, filled with navigation gathered from the
+    composed modules.
+
+    An operator replacing the interface swaps this file — the components underneath are
+    unchanged, which is the whole point of modules shipping components rather than pages.
+*@
+@using System.Security.Claims
+@using NexusSyncServer.Hosting.Modules
+@using NexusSyncServer.Ux
+@inherits LayoutComponentBase
+@inject IEnumerable<IPortalPageModule> PageModules
+
+<NexusPageLayout Brand="NexusSyncServer">
+    <NavItems>
+        @* Not named `page`: inside markup, `@page.Route` is parsed as the @page directive. *@
+        @foreach (var entry in Pages)
+        {
+            <NavLink href="@entry.Route" Match="NavLinkMatch.Prefix">@entry.Title</NavLink>
+        }
+    </NavItems>
+    <HeaderRight>
+        @if (User?.Identity?.IsAuthenticated == true)
+        {
+            <span>@User.Identity.Name</span>
+            <form method="post" action="/account/signout">
+                <AntiforgeryToken />
+                <button type="submit" class="nx-btn">Sign out</button>
+            </form>
+        }
+        else
+        {
+            <a class="nx-btn" href="/account/signin">Sign in</a>
+        }
+    </HeaderRight>
+    <ChildContent>
+        @Body
+    </ChildContent>
+</NexusPageLayout>
+
+@code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    private ClaimsPrincipal? User => Http?.User;
+
+    private IEnumerable<PortalPage> Pages => PageModules
+        .SelectMany(m => m.Pages)
+        .OrderBy(p => p.Order)
+        .ThenBy(p => p.Title, StringComparer.Ordinal);
+}

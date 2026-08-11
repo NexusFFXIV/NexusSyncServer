@@ -1,0 +1,341 @@
+/*
+   The default look. One file, no build step, no framework.
+
+   An operator replacing this needs to override a handful of custom properties, not learn a
+   design system — which is the point of keeping it this small.
+*/
+
+:root {
+    --nx-bg: #12131a;
+    --nx-surface: #1b1d27;
+    --nx-surface-2: #232633;
+    --nx-border: #333747;
+    --nx-text: #e6e8ef;
+    --nx-muted: #9aa0b4;
+    --nx-accent: #6f8fff;
+    --nx-danger: #ff6b6b;
+    --nx-ok: #4ecb8b;
+    --nx-radius: 8px;
+    --nx-mono: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --nx-bg: #f6f7fa;
+        --nx-surface: #ffffff;
+        --nx-surface-2: #f0f2f7;
+        --nx-border: #d9dde8;
+        --nx-text: #1a1c24;
+        --nx-muted: #5c6376;
+    }
+}
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--nx-bg);
+    color: var(--nx-text);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.nx-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+.nx-header {
+    display: flex; align-items: center; gap: 1.5rem;
+    padding: 0.85rem 1.5rem;
+    background: var(--nx-surface);
+    border-bottom: 1px solid var(--nx-border);
+}
+
+.nx-brand { font-weight: 600; color: var(--nx-text); text-decoration: none; }
+.nx-nav { display: flex; gap: 1rem; flex: 1; }
+.nx-nav a { color: var(--nx-muted); text-decoration: none; }
+.nx-nav a:hover, .nx-nav a.active { color: var(--nx-text); }
+.nx-header-right { display: flex; align-items: center; gap: 0.75rem; color: var(--nx-muted); }
+
+.nx-main { flex: 1; width: 100%; max-width: 62rem; margin: 0 auto; padding: 2rem 1.5rem; }
+
+.nx-footer {
+    display: flex; justify-content: space-between;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--nx-border);
+    color: var(--nx-muted); font-size: 0.85rem;
+}
+
+.nx-card {
+    background: var(--nx-surface);
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.nx-muted { color: var(--nx-muted); }
+.nx-mono { font-family: var(--nx-mono); }
+
+.nx-btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--nx-border);
+    border-radius: var(--nx-radius);
+    background: var(--nx-surface-2);
+    color: var(--nx-text);
+    font: inherit; text-decoration: none; cursor: pointer;
+}
+.nx-btn:hover { border-color: var(--nx-accent); }
+.nx-btn-primary { background: var(--nx-accent); border-color: var(--nx-accent); color: #fff; }
+.nx-btn-danger { color: var(--nx-danger); }
+
+.nx-table { width: 100%; border-collapse: collapse; }
+.nx-table th, .nx-table td { text-align: left; padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--nx-border); }
+.nx-table th { color: var(--nx-muted); font-weight: 500; font-size: 0.85rem; }
+
+.nx-field { display: block; margin-bottom: 1rem; }
+.nx-field > span { display: block; margin-bottom: 0.3rem; color: var(--nx-muted); font-size: 0.9rem; }
+.nx-field input, .nx-field select {
+    width: 100%; padding: 0.5rem 0.7rem;
+    background: var(--nx-bg); color: var(--nx-text);
+    border: 1px solid var(--nx-border); border-radius: var(--nx-radius);
+    font: inherit;
+}
+
+/* The one-time key reveal. Loud on purpose — this is the only moment the value exists. */
+.nx-reveal {
+    padding: 1rem;
+    border: 1px solid var(--nx-ok);
+    border-radius: var(--nx-radius);
+    background: var(--nx-surface-2);
+    word-break: break-all;
+    font-family: var(--nx-mono);
+}
+
+.nx-warn { color: var(--nx-danger); }
+.nx-badge {
+    display: inline-block; padding: 0.1rem 0.5rem;
+    border: 1px solid var(--nx-border); border-radius: 999px;
+    font-size: 0.75rem; color: var(--nx-muted);
+}
+
+/* --- permission picker -------------------------------------------------------------- */
+
+.nx-select {
+    width: 100%;
+    padding: 0.45rem 0.55rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 6px;
+    background: var(--nx-surface);
+    color: var(--nx-text);
+    font: inherit;
+}
+
+.nx-scopes {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem 1rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 8px;
+}
+
+.nx-scopes legend {
+    padding: 0 0.4rem;
+    font-weight: 600;
+}
+
+.nx-scope-group + .nx-scope-group {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--nx-border);
+}
+
+.nx-scope-group h4 {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+}
+
+.nx-check {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.4rem 0;
+    cursor: pointer;
+}
+
+.nx-check input[type="checkbox"] {
+    /* Nudged down so it sits on the first line of the label rather than above it. */
+    margin-top: 0.25rem;
+    flex: 0 0 auto;
+}
+
+.nx-check-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.nx-check-title {
+    display: flex;
+    gap: 0.5rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+
+.nx-check-title code {
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+/* --- sign-in provider buttons --------------------------------------------------------- */
+
+.nx-signin-providers {
+    display: flex;
+    flex-direction: column;   /* one choice per line; side by side they read as one control */
+    gap: 0.6rem;
+    align-items: stretch;
+    max-width: 22rem;
+}
+
+.nx-signin-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    text-decoration: none;
+}
+
+.nx-signin-icon {
+    display: inline-flex;
+    /* The provider ships the glyph; currentColor makes it follow the button's text colour
+       instead of carrying a second palette. */
+    align-items: center;
+}
+
+/* Renew and Revoke sit side by side; each is its own form, so without this they stack. */
+.nx-row-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+/* Bringing an expiry forward, inline in the row it belongs to. */
+.nx-inline-form {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    margin-top: 0.35rem;
+}
+
+.nx-date-inline {
+    width: auto;
+    padding: 0.2rem 0.35rem;
+    font-size: 0.85em;
+}
+
+/* Inline edit, folded away until asked for. */
+.nx-edit {
+    display: inline-block;
+    position: relative;
+}
+
+.nx-edit > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0 0.3rem;
+    border-radius: 4px;
+    opacity: 0.6;
+    user-select: none;
+}
+
+.nx-edit > summary::-webkit-details-marker { display: none; }
+
+.nx-edit > summary:hover,
+.nx-edit[open] > summary {
+    opacity: 1;
+    background: var(--nx-border);
+}
+
+/* Floated out of the row so opening it cannot resize the table. */
+.nx-edit-body {
+    position: absolute;
+    z-index: 20;
+    top: 1.6rem;
+    right: 0;
+    min-width: 15rem;
+    padding: 0.7rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 8px;
+    background: var(--nx-surface);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+}
+
+/* The column holds a phrase, not a paragraph — stop it wrapping mid-sentence. */
+.nx-table td:nth-last-child(2) { white-space: nowrap; }
+
+/* Folded lists: scopes in a row, contracts on the portal page. */
+.nx-fold > summary {
+    cursor: pointer;
+    user-select: none;
+}
+
+.nx-fold-list {
+    margin: 0.3rem 0 0;
+    padding-left: 1.1rem;
+}
+
+.nx-contract {
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--nx-border);
+}
+
+.nx-contract > summary {
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+}
+
+.nx-contract h4 {
+    margin: 1rem 0 0.4rem;
+    display: flex;
+    gap: 0.6rem;
+    align-items: baseline;
+    flex-wrap: wrap;
+    font-size: 0.95rem;
+}
+
+/* The scope editor holds a checkbox list, so it needs more room than the date picker. */
+.nx-edit-wide {
+    min-width: 26rem;
+    max-height: 24rem;
+    overflow-y: auto;
+}
+
+.nx-edit-wide h5 {
+    margin: 0.7rem 0 0.2rem;
+    font-size: 0.85rem;
+    color: var(--nx-muted);
+}
+
+.nx-edit-wide h5:first-child { margin-top: 0; }
+
+/* The one-time key, with a copy button beside it. */
+.nx-reveal {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nx-reveal > span { flex: 1 1 auto; word-break: break-all; }
+
+.nx-copy {
+    flex: 0 0 auto;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid var(--nx-border);
+    border-radius: 5px;
+    background: var(--nx-surface);
+    color: inherit;
+    font: inherit;
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.nx-copy:hover { background: var(--nx-border); }

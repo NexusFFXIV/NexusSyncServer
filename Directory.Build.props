@@ -1,0 +1,48 @@
+<Project>
+
+  <PropertyGroup>
+    <Authors>nxships</Authors>
+    <Company>NexusFFXIV</Company>
+    <Copyright>Copyright (c) nxships</Copyright>
+    <RepositoryUrl>https://github.com/NexusFFXIV/NexusSyncServer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/NexusFFXIV/NexusSyncServer</PackageProjectUrl>
+    <PackageLicenseExpression>AGPL-3.0-only</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!-- Conditional: setting PackageIcon without shipping the file fails pack with NU5046.
+         Drop the condition once the repo has an icon. -->
+    <PackageIcon Condition="Exists('$(MSBuildThisFileDirectory)images\icon.png')">icon.png</PackageIcon>
+    <PackageTags>ffxiv;dalamud;sync;server;api</PackageTags>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <MinVerDefaultPreReleaseIdentifiers>preview.0</MinVerDefaultPreReleaseIdentifiers>
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <!-- Server code is the side that faces the network and holds other people's data.
+         A warning here is worth stopping the build for. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--
+      No <Platforms>x64</Platforms>, unlike the plugin repos. This has to build and run on
+      linux-x64 inside a container; pinning the platform the way an in-process Dalamud
+      library must would only get in the way here.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MinVer" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)README.md')">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)images\icon.png')">
+    <None Include="$(MSBuildThisFileDirectory)images\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

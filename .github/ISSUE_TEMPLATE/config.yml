@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: General question or discussion
+    url: https://github.com/NexusFFXIV/NexusSyncServer/discussions
+    about: For open-ended questions, ideas without a concrete proposal, or general chat — use Discussions, not Issues.
+  - name: Security issue
+    url: https://github.com/NexusFFXIV/.github/blob/main/SECURITY.md
+    about: A server holds other people's data and issues credentials. Please report anything security-relevant privately rather than in a public issue.

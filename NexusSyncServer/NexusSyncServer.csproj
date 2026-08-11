@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer</RootNamespace>
+		<AssemblyName>NexusSyncServer</AssemblyName>
+		<!-- Not packable: this is the executable inside the container, not something anyone
+		     references. The reusable halves are NexusSyncServer.Hosting and the modules. -->
+		<IsPackable>false</IsPackable>
+		<Deterministic>true</Deterministic>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<!-- Slims the image: no ICU data needed, since nothing here formats for a human locale.
+		     Every culture-sensitive path in this stack is already pinned to InvariantCulture. -->
+		<UserSecretsId>nexussyncserver</UserSecretsId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- The modules this image is composed of. This list IS the composition — swapping a
+		     module out means editing here and rebuilding, which is the whole point of
+		     build-time composition over runtime assembly loading. -->
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Api\NexusSyncServer.Modules.Api.csproj" />
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Auth\NexusSyncServer.Modules.Auth.csproj" />
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Auth.Discord\NexusSyncServer.Modules.Auth.Discord.csproj" />
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Auth.XivAuth\NexusSyncServer.Modules.Auth.XivAuth.csproj" />
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Registry\NexusSyncServer.Modules.Registry.csproj" />
+		<ProjectReference Include="..\Modules\NexusSyncServer.Modules.Storage.MariaDb\NexusSyncServer.Modules.Storage.MariaDb.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

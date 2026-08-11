@@ -1,0 +1,83 @@
+name: Bug report
+description: The server misbehaves — rejected requests, wrong storage, failed migration, container will not start.
+title: "[Bug]: "
+labels: ["bug", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report.
+
+        **Please do not paste an API key.** If one appears in a log line you want to share, redact everything after the `nxs_` prefix. Keys are bearer credentials — whoever reads the issue has it.
+
+        **Wrong repo?** If a *plugin* fails to talk to a working server, the client half lives in [NexusKit.Modules](https://github.com/NexusFFXIV/NexusKit.Modules). If two peers disagree about a contract, the norm is in [NexusKit](https://github.com/NexusFFXIV/NexusKit) as `NexusKit.Sync`.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Api — handshake, push, pull, describe
+        - Registry — contract registration, versioning, index creation
+        - Storage — records, cursors, retention
+        - Auth — Discord login, API keys, scopes
+        - Ux / admin pages
+        - Container, compose, or deployment
+        - Unsure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Server version
+      description: The image tag you are running, or the output of `GET /health`.
+      placeholder: "e.g. ghcr.io/nexusffxiv/nexussyncserver:0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: deployment
+    attributes:
+      label: How is it deployed?
+      placeholder: "e.g. docker compose on Debian 12, behind Caddy"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: |
+        Steps to reproduce, expected behaviour, actual behaviour. For a rejected request, include the method, the route, the status code and the Problem Details body — that body is designed to say exactly what went wrong.
+      placeholder: |
+        1. Registered contract "acme.venues" 1.0
+        2. Client pushed 20 records to "reports"
+        3. Expected: 200 with 20 accepted outcomes
+        4. Actual: 422, validation-failed on every record
+    validations:
+      required: true
+
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract JSON (optional)
+      description: The registered contract, if relevant. Redact anything sensitive.
+      render: json
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server logs (optional)
+      description: Redact API keys before pasting.
+      render: shell
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched [existing issues](https://github.com/NexusFFXIV/NexusSyncServer/issues?q=is%3Aissue) and didn't find a duplicate.
+          required: true
+        - label: I have not pasted an unredacted API key anywhere in this report.
+          required: true

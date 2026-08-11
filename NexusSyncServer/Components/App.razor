@@ -1,0 +1,20 @@
+@*
+    The HTML document.
+
+    Owned by the host rather than by NexusSyncServer.Hosting, because this is the file an operator is
+    most likely to want to change — a different title, an extra stylesheet, an analytics tag
+    they are obliged to carry. Nothing in the framework reaches into it.
+*@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="_content/NexusSyncServer.Ux/nexussyncserver.css" />
+    <HeadOutlet />
+</head>
+<body>
+    <Routes />
+</body>
+</html>

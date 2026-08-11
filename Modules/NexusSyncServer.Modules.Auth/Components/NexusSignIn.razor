@@ -1,0 +1,102 @@
+@*
+    Sign-in: one button per configured provider.
+
+    A component rather than a page, so an operator can drop it into their own layout. The
+    module also mounts it at /account/signin — that page is three lines and exists only so a
+    server with no custom interface still works.
+*@
+@namespace NexusSyncServer.Modules.Auth.Components
+@inject IEnumerable<IIdentityProvider> Providers
+
+<div class="nx-card">
+    <h2>@Heading</h2>
+
+    @if (!Providers.Any())
+    {
+        @* Valid, not broken: a server may issue keys out of band only. Saying so beats an
+           empty box that looks like a bug. *@
+        <p class="nx-muted">
+            No sign-in provider is configured on this server. API keys are issued by the
+            operator — see the deployment's documentation.
+        </p>
+    }
+    else
+    {
+        @if (Error is { Length: > 0 })
+        {
+            <p class="nx-warn">@Describe(Error)</p>
+        }
+
+        <p class="nx-muted">@Subheading</p>
+
+        <div class="nx-signin-providers">
+            @foreach (var provider in Providers.OrderBy(p => p.DisplayName, StringComparer.Ordinal))
+            {
+                var branding = provider.Branding;
+
+                @* Stacked, one per line. Side by side, two brand-coloured buttons read as a
+                   single control with two halves; stacked they read as two choices, which is
+                   what they are. It also keeps long provider names from wrapping. *@
+                <a class="nx-btn nx-signin-btn @(branding.HasAccent ? "" : "nx-btn-primary")"
+                   href="@StartUrl(provider.Id)"
+                   style="@AccentStyle(branding)">
+                    @if (branding.IconSvg is { Length: > 0 } icon)
+                    {
+                        @* Provider-supplied markup, from a compiled-in assembly — never from
+                           configuration or a request. See ProviderBranding. *@
+                        <span class="nx-signin-icon">@((MarkupString)icon)</span>
+                    }
+                    <span>Sign in with @provider.DisplayName</span>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Heading above the buttons.</summary>
+    [Parameter] public string Heading { get; set; } = "Sign in";
+
+    /// <summary>Line shown above the buttons when at least one provider exists.</summary>
+    [Parameter] public string Subheading { get; set; } = "Choose how you would like to sign in.";
+
+    /// <summary>
+    /// Where to send the visitor once they are signed in. Null lands on the default page.
+    /// <para>Carried through so that arriving here by being bounced off a page you wanted
+    /// takes you back to that page, rather than to whichever one this server considers home.</para>
+    /// </summary>
+    [Parameter] public string? ReturnUrl { get; set; }
+
+    /// <summary>The start URL for one provider, carrying the return destination if there is one.</summary>
+    private string StartUrl(string providerId) =>
+        string.IsNullOrWhiteSpace(ReturnUrl)
+            ? $"/account/signin/{providerId}"
+            : $"/account/signin/{providerId}?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+    /// <summary>
+    /// Inline colours for a branded button, or nothing for one that inherits the page.
+    /// <para>Inline rather than a stylesheet rule, because the colours come from whichever
+    /// provider plugins happen to be composed in — the stylesheet cannot know them, and a
+    /// class per provider would mean editing the theme to add one.</para>
+    /// </summary>
+    private static string? AccentStyle(ProviderBranding branding) =>
+        branding.HasAccent
+            ? $"background:{branding.Accent};border-color:{branding.Accent};color:{branding.OnAccent ?? "#fff"}"
+            : null;
+
+    /// <summary>Error code from the callback, surfaced as a readable line.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    private static string Describe(string error) => error switch
+    {
+        "declined" => "Sign-in was cancelled.",
+        "state" => "That sign-in attempt could not be verified. Please start again.",
+        "nocode" => "The provider did not return an authorization code. Please try again.",
+        // The most likely one in practice, and worth naming precisely: XIVAuth refuses
+        // accounts without a verified character when the deployment requires one.
+        "refused" => "The provider refused this sign-in. If this server requires a verified "
+                     + "FINAL FANTASY XIV character, link one first and try again.",
+        "disabled" => "This account has been disabled.",
+        _ => "Sign-in did not complete.",
+    };
+}

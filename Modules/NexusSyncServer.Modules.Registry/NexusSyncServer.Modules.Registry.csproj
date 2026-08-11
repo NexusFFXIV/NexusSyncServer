@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Modules.Registry</RootNamespace>
+		<AssemblyName>NexusSyncServer.Modules.Registry</AssemblyName>
+		<Description>Contract registry for NexusSyncServer: operator-side registration, version negotiation, schema-registry style compatibility checking, and creation of the indexes a contract declares.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);CS1591;CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- Components, routing and [Authorize] on a page. -->
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+		<!-- The portal page. Razor components need the shared layout and the scope guard. -->
+		<ProjectReference Include="..\..\NexusSyncServer.Ux\NexusSyncServer.Ux.csproj" />
+		<ProjectReference Include="..\NexusSyncServer.Modules.Storage.MariaDb\NexusSyncServer.Modules.Storage.MariaDb.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="NexusKit.Sync" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

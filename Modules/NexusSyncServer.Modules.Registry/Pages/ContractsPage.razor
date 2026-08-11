@@ -1,0 +1,103 @@
+@*
+    Contract documents, for a signed-in human.
+
+    Deliberately a page and not a relaxation of the API. GET /v1/contracts/{id} stays
+    key-only, because a bearer token is issued on purpose with the scopes it carries, while
+    a session only says somebody arrived — and on a server where anyone may sign in, that is
+    not a permission.
+
+    This is a different surface with a different audience: the operator's own users, reading
+    HTML in a browser they had to log into. If that population is too wide for comfort, the
+    lever is who may sign in — XIVAuth with a verified character rather than open Discord —
+    not whether this page exists.
+*@
+@page "/contracts"
+@namespace NexusSyncServer.Modules.Registry.Pages
+@using Microsoft.AspNetCore.Authorization
+@using NexusKit.Sync.Contracts
+@attribute [Authorize]
+@inject IContractRegistry Registry
+
+<PageTitle>Contracts</PageTitle>
+
+<div class="nx-card">
+    <h2>Contracts served here</h2>
+    <p class="nx-muted">
+        What each contract declares, and the hash both sides check against. A plugin reads the
+        same thing over the API with a key carrying <code class="nx-mono">contract:pull</code>.
+    </p>
+
+    @if (Registry.ContractIds.Count == 0)
+    {
+        <p class="nx-muted">
+            None registered yet. Drop a <code>*.json</code> contract into the mounted
+            <code>/contracts</code> directory and restart.
+        </p>
+    }
+
+    @foreach (var contractId in Registry.ContractIds)
+    {
+        @foreach (var version in Registry.VersionsOf(contractId))
+        {
+            var contract = Registry.Find(contractId, version);
+            if (contract is null) continue;
+
+            <details class="nx-fold nx-contract">
+                <summary>
+                    <strong class="nx-mono">@contractId</strong>
+                    <span class="nx-muted">
+                        @version · @contract.Collections.Count collection@(contract.Collections.Count == 1 ? "" : "s")
+                    </span>
+                </summary>
+
+                <p class="nx-muted nx-mono">@contract.Hash</p>
+
+                @foreach (var collection in contract.Collections)
+                {
+                    <h4>
+                        @collection.Name
+                        <span class="nx-muted">
+                            @collection.Direction.ToString().ToLowerInvariant() ·
+                            key @collection.Key ·
+                            scope <code class="nx-mono">@ContractScopes.For(collection)</code>
+                        </span>
+                    </h4>
+
+                    <table class="nx-table">
+                        <thead><tr><th>Field</th><th>Type</th><th>Rules</th></tr></thead>
+                        <tbody>
+                        @foreach (var field in collection.Fields)
+                        {
+                            <tr>
+                                <td class="nx-mono">@field.Name</td>
+                                <td>@field.Type.ToString().ToLowerInvariant()</td>
+                                <td class="nx-muted">@Rules(field)</td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+
+                    <p class="nx-muted">
+                        @(collection.Indexed.Count > 0 ? $"indexed: {string.Join(", ", collection.Indexed)}" : "no declared indexes")
+                        @(collection.Retention is { } r ? $" · kept {DurationText.Format(r)}" : " · kept indefinitely")
+                        @(collection.RateLimit is { } rl ? $" · up to {rl.PerMinute} records a minute" : "")
+                    </p>
+                }
+            </details>
+        }
+    }
+</div>
+
+@code {
+    /// <summary>The declared constraints, or a dash when a field has none.</summary>
+    private static string Rules(FieldDefinition field)
+    {
+        var parts = new List<string>();
+        if (field.Required) parts.Add("required");
+        if (field.Min is { } min) parts.Add($"min {min}");
+        if (field.Max is { } max) parts.Add($"max {max}");
+        if (field.MaxLength is { } len) parts.Add($"max length {len}");
+
+        return parts.Count == 0 ? "—" : string.Join(", ", parts);
+    }
+}

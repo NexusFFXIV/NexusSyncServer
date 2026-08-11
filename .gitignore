@@ -1,0 +1,43 @@
+# Local-only (never commit)
+CLAUDE.md
+.claude/
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userprefs
+*.swp
+*.swo
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+
+# Artifacts
+artifacts/
+*.nupkg
+*.snupkg
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Container / local runtime
+.env
+mariadb-data/
+
+# Locally packed dependencies for the container build (scripts/pack-local-deps.ps1).
+# Entirely ignored: these are build artefacts, and NuGet tolerates the folder not existing.
+local-packages/
+
+# Local credential mount. Entirely ignored, and nothing is committed to make it exist —
+# a folder whose whole purpose is to hold secrets has no business being tracked at all.
+secrets/

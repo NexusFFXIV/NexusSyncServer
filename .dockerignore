@@ -1,0 +1,16 @@
+# Leading ** matters. A bare "bin/" matches only the repository root, so every
+# Modules/*/obj would still be shipped into the build context — which both slows the build
+# and can fail it outright when a stale obj refers to a path that no longer exists.
+**/bin/
+**/obj/
+
+**/.git/
+**/.vs/
+
+# Credentials and local configuration never belong in an image layer.
+secrets/
+.env
+
+# Contracts arrive through a volume mount at runtime, deliberately not baked in.
+contracts/
+samples/

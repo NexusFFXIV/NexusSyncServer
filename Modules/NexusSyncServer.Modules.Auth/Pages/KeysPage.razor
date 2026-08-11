@@ -1,0 +1,19 @@
+@*
+    The default mounting of NexusApiKeyManager. Same idea as SignInPage — replace or embed the
+    component, this page is only the fallback.
+*@
+@page "/account/keys"
+@namespace NexusSyncServer.Modules.Auth.Pages
+@using Microsoft.AspNetCore.Authorization
+
+@* Anonymous visitors are sent to the provider picker rather than shown a page telling them to
+   go there. The cookie handler already knows the way — AuthModule sets LoginPath — so this
+   attribute is the whole redirect, and it comes back here afterwards via ReturnUrl.
+
+   The component itself keeps its own signed-out message: embedded in somebody's own page,
+   there is no guarantee the host page requires authentication. *@
+@attribute [Authorize]
+
+<PageTitle>API keys</PageTitle>
+
+<NexusApiKeyManager />

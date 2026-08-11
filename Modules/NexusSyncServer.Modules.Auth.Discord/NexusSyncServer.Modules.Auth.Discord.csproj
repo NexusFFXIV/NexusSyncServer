@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Modules.Auth.Discord</RootNamespace>
+		<AssemblyName>NexusSyncServer.Modules.Auth.Discord</AssemblyName>
+		<Description>Discord sign-in for NexusSyncServer. The ecosystem's most familiar login; pair it with XIVAuth if you want a character-verified gate as well.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\NexusSyncServer.Modules.Auth\NexusSyncServer.Modules.Auth.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

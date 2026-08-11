@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Modules.Auth</RootNamespace>
+		<AssemblyName>NexusSyncServer.Modules.Auth</AssemblyName>
+		<Description>Authentication for NexusSyncServer: accounts, API-key issuance and validation, scope enforcement, revocation, per-key rate limiting, and the default sign-in and key-management components.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>CS1591</NoWarn>
+		<!-- Razor's generated partials carry XML docs we do not author, and unused usings in
+		     .razor files are routine. Warnings-as-errors here fights the generator rather than
+		     catching anything; the C# in this project is still held to it by review. -->
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- HttpContext, the endpoint types the scope guard is built on, and Razor components. -->
+		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+		<ProjectReference Include="..\..\NexusSyncServer.Ux\NexusSyncServer.Ux.csproj" />
+		<ProjectReference Include="..\NexusSyncServer.Modules.Storage.MariaDb\NexusSyncServer.Modules.Storage.MariaDb.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="NexusKit.Sync" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

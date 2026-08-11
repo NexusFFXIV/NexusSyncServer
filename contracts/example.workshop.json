@@ -1,0 +1,46 @@
+{
+  "contractId": "example.workshop",
+  "version": "1.0",
+  "collections": [
+    {
+      "name": "sessions",
+      "direction": "uplink",
+      "key": "session_id",
+      "fields": {
+        "session_id": { "type": "guid", "required": true },
+        "recipe_id": { "type": "string", "required": true, "maxLength": 64 },
+        "duration_seconds": { "type": "integer", "min": 0, "max": 86400 },
+        "succeeded": { "type": "boolean" },
+        "started_at": { "type": "timestamp" }
+      },
+      "indexed": ["recipe_id"],
+      "rateLimit": { "perMinute": 120 },
+      "retention": "30d"
+    },
+    {
+      "name": "ratings",
+      "direction": "uplink",
+      "key": "rating_id",
+      "fields": {
+        "rating_id": { "type": "guid", "required": true },
+        "recipe_id": { "type": "string", "required": true, "maxLength": 64 },
+        "stars": { "type": "integer", "min": 1, "max": 5 },
+        "comment": { "type": "string", "maxLength": 280 }
+      },
+      "indexed": ["recipe_id"],
+      "rateLimit": { "perMinute": 20 },
+      "retention": "365d"
+    },
+    {
+      "name": "recipes",
+      "direction": "downlink",
+      "key": "recipe_id",
+      "fields": {
+        "recipe_id": { "type": "string", "required": true, "maxLength": 64 },
+        "name": { "type": "string", "required": true, "maxLength": 128 },
+        "difficulty": { "type": "integer", "min": 1, "max": 10 },
+        "average_stars": { "type": "number", "min": 0, "max": 5 }
+      }
+    }
+  ]
+}

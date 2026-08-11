@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<RootNamespace>NexusSyncServer.Modules.Storage.MariaDb</RootNamespace>
+		<AssemblyName>NexusSyncServer.Modules.Storage.MariaDb</AssemblyName>
+		<Description>MariaDB storage for NexusSyncServer: the shared DbContext, the generic contract-defined record store with cursors and tombstones, the per-module migration runner, and retention housekeeping.</Description>
+		<IsPackable>true</IsPackable>
+		<Deterministic>true</Deterministic>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>CS1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\NexusSyncServer.Hosting\NexusSyncServer.Hosting.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="MySql.EntityFrameworkCore" />
+		<PackageReference Include="NexusKit.Sync" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="README.md" />
+		<None Include="docs\**\*.md" />
+	</ItemGroup>
+</Project>

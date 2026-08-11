@@ -1,0 +1,51 @@
+<Project>
+
+  <!-- Central Package Management: every NuGet version for this repo lives here, and the
+       csprojs carry bare <PackageReference Include="..."/> only.
+
+       Same reasoning as the other NexusFFXIV repos: Dependabot scopes NuGet updates per
+       project directory, so with per-csproj versions a grouped update can rewrite some
+       projects and miss others. One project keeping Microsoft.Extensions.* on the old
+       version while another moved is enough to fail the build with NU1605 (package
+       downgrade, escalated to an error by TreatWarningsAsErrors). One file means a version
+       can only move everywhere at once. -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Keep EF Core and Microsoft.Extensions.* on one version. EF Core pulls specific
+         Microsoft.Extensions.* versions transitively, and a split between the two families
+         is exactly what produces NU1605. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MariaDB provider. Tracks EF Core's major but has its own patch cadence, so the
+         patch number will not match Microsoft.EntityFrameworkCore above — that is expected
+         and is not the NU1605 case the comment above warns about.
+
+         Oracle's provider rather than Pomelo, which has the better MariaDB reputation:
+         Pomelo stops at EF Core 9 and this repo is on 10. Oracle's targets MySQL and does
+         not claim MariaDB support, so the combination is verified rather than assumed —
+         see the module README for what was tested and what MariaDB-only SQL it relies on. -->
+    <PackageVersion Include="MySql.EntityFrameworkCore" Version="10.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The sync norm, shared with the plugin side. Open-ended range on purpose: the local
+         workspace swaps it for a ProjectReference and CI takes the newest published package.
+         Do not let a bump turn it into an exact pin — a pinned protocol package is how a
+         server ends up unable to serve clients that have moved on. -->
+    <PackageVersion Include="NexusKit.Sync" Version="[0.5.0,)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="MinVer" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

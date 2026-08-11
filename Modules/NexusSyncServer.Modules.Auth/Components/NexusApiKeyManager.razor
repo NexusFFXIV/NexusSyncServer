@@ -1,0 +1,812 @@
+@*
+    The key manager: list, create, revoke.
+
+    Server-rendered with plain form posts — no interactive circuit. A page that only lists and
+    submits does not need one, and not having one means it works with JavaScript disabled and
+    survives a lost WebSocket, which for the page people use to recover access is worth more
+    than snappier updates.
+
+    Embed it anywhere:  <NexusApiKeyManager Contract="acme.venuetracker" />
+*@
+@namespace NexusSyncServer.Modules.Auth.Components
+@using System.Globalization
+@using Microsoft.Extensions.DependencyInjection
+@using NexusSyncServer.Hosting.Catalog
+@inject IApiKeyIssuer Issuer
+@inject IAccountService Accounts
+@inject NavigationManager Nav
+@* Resolved rather than injected: a server composed without a registry has no catalogue, and
+   that is a valid deployment, not a missing dependency. [Inject] would throw. *@
+@inject IServiceProvider Services
+@inject RevealStore Reveals
+
+<div class="nx-card">
+    <h2>@Heading</h2>
+
+    @if (AccountId is null)
+    {
+        <p class="nx-muted">You are not signed in.</p>
+        <a class="nx-btn nx-btn-primary" href="/account/signin">Sign in</a>
+    }
+    else
+    {
+        @if (Revealed is not null)
+        {
+            @* The only moment this value exists anywhere. Dismissing is an explicit action so
+               the value does not sit on screen behind whoever walks past next — and it is gone
+               on any reload regardless, because nothing keeps it between requests. *@
+            <p><strong>Your new key — copy it now.</strong></p>
+            <div class="nx-reveal">
+                <span id="nx-key">@Revealed</span>
+                @* Hidden until the script runs. A button that silently does nothing with
+                   JavaScript off is worse than no button — the text is selectable either way. *@
+                <button type="button" id="nx-copy" class="nx-copy" hidden
+                        title="Copy to clipboard" aria-label="Copy key to clipboard">⧉</button>
+            </div>
+            <script>
+                (function () {
+                    var button = document.getElementById('nx-copy');
+                    var value = document.getElementById('nx-key');
+                    if (!button || !value) return;
+
+                    button.hidden = false;
+
+                    button.addEventListener('click', function () {
+                        var text = value.textContent.trim();
+
+                        function done() {
+                            button.textContent = '✓';
+                            setTimeout(function () { button.textContent = '⧉'; }, 1500);
+                        }
+
+                        // The clipboard API needs a secure context. localhost counts as one,
+                        // but a server reached over plain http from elsewhere does not — hence
+                        // the older path behind it.
+                        if (navigator.clipboard && window.isSecureContext) {
+                            navigator.clipboard.writeText(text).then(done);
+                            return;
+                        }
+
+                        var scratch = document.createElement('textarea');
+                        scratch.value = text;
+                        scratch.style.position = 'fixed';
+                        scratch.style.opacity = '0';
+                        document.body.appendChild(scratch);
+                        scratch.select();
+                        try { document.execCommand('copy'); done(); } finally { scratch.remove(); }
+                    });
+                })();
+            </script>
+            <p class="nx-warn">
+                This is shown once. The server stores only a hash and cannot show it again.
+                If you lose it, use <em>Renew</em> on the key below to replace its secret.
+            </p>
+            @* A link, not a form: there is nothing to submit. It drops the ticket from the
+               URL, and the ticket is already spent — reloading with it shows nothing. *@
+            <a class="nx-btn" href="/account/keys">I have copied it — hide</a>
+        }
+
+        <h3>Your keys</h3>
+        @if (Keys.Count == 0)
+        {
+            <p class="nx-muted">You have no keys yet.</p>
+        }
+        else
+        {
+            <table class="nx-table">
+                <thead>
+                    <tr>
+                        @* No key column. A key is a secret; even a prefix of one is only
+                           useful for recognising it somewhere it should not be. Labels are
+                           what people tell their keys apart by. *@
+                        <th>Label</th><th>Scopes</th><th>Contract</th>
+                        <th>Last used</th><th>Valid until</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var key in Keys)
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(key.Label) ? "(no label)" : key.Label)</td>
+                        <td>
+                            @{ var bare = BareScopes(key).ToArray(); }
+                            @if (key.RevokedAt is null && Catalogue.Count > 0)
+                            {
+                                @* Same pencil as the expiry, same reason: a permanently open
+                                   checkbox list would make every row as tall as the picker. *@
+                                <details class="nx-edit">
+                                    <summary title="Change what this key may do" aria-label="Edit scopes">✎</summary>
+                                    <div class="nx-edit-body nx-edit-wide">
+                                        <form method="post"
+                                              @formname="@($"scopes-{key.Id}")"
+                                              @onsubmit="() => SaveScopesAsync(key.Id)">
+                                            <AntiforgeryToken />
+                                            @foreach (var group in Catalogue.GroupBy(o => o.ContractId, StringComparer.Ordinal))
+                                            {
+                                                <h5>@group.Key</h5>
+                                                @foreach (var option in group)
+                                                {
+                                                    var qualified = QualifiedScope.Of(option.ContractId, option.Scope);
+                                                    <label class="nx-check">
+                                                        <input type="checkbox"
+                                                               name="@($"scope-{key.Id}")"
+                                                               value="@qualified"
+                                                               checked="@Holds(key, option)" />
+                                                        <span class="nx-check-body">
+                                                            <span class="nx-check-title">@Headline(option)</span>
+                                                            <span class="nx-muted nx-mono">@option.Scope</span>
+                                                        </span>
+                                                    </label>
+                                                }
+                                            }
+                                            <h5>Built-in</h5>
+                                            <label class="nx-check">
+                                                <input type="checkbox"
+                                                       name="@($"scope-{key.Id}")"
+                                                       value="@QualifiedScope.ReadContracts"
+                                                       checked="@key.Scopes.Contains(QualifiedScope.ReadContracts)" />
+                                                <span class="nx-check-body">
+                                                    <span class="nx-check-title">Read contract documents (all contracts)</span>
+                                                    <span class="nx-muted nx-mono">@QualifiedScope.ReadContracts</span>
+                                                </span>
+                                            </label>
+                                            <button type="submit" class="nx-btn">Save permissions</button>
+                                        </form>
+                                    </div>
+                                </details>
+                            }
+                            @if (bare.Length <= 2)
+                            {
+                                @string.Join(", ", bare)
+                            }
+                            else
+                            {
+                                @* Folded past two. A key spanning contracts can carry a dozen,
+                                   and a cell that tall pushes every other row out of shape. *@
+                                <details class="nx-fold">
+                                    <summary>@bare.Length permissions</summary>
+                                    <ul class="nx-fold-list">
+                                        @foreach (var s in bare) { <li>@s</li> }
+                                    </ul>
+                                </details>
+                            }
+                        </td>
+                        <td>@ContractsOf(key)</td>
+                        <td>@(key.LastUsedAt?.ToString("u") ?? "never")</td>
+                        <td>
+                            @ExpiryText(key)
+                            @if (key.RevokedAt is null)
+                            {
+                                @* Folded away behind a pencil. Shown open, the date field and
+                                   its button widen the column enough to squeeze every other
+                                   one — and it is a rare action, not one worth permanent room.
+                                   <details> rather than a real dialog because this page has no
+                                   interactive circuit; a modal would need script to open. *@
+                                <details class="nx-edit">
+                                    <summary title="Change when this key expires" aria-label="Edit expiry">✎</summary>
+                                    <div class="nx-edit-body">
+                                        <form method="post"
+                                              @formname="@($"expiry-{key.Id}")"
+                                              @onsubmit="() => ShortenAsync(key.Id)">
+                                            <AntiforgeryToken />
+                                            <label class="nx-muted" for="@($"expiry-{key.Id}-date")">
+                                                Valid to the end of
+                                            </label>
+                                            <div class="nx-inline-form">
+                                                @* Tomorrow at the earliest: today would already
+                                                   be partly gone, and the server refuses any
+                                                   moment that is not still ahead. *@
+                                                <input type="date"
+                                                       id="@($"expiry-{key.Id}-date")"
+                                                       name="@($"expiry-{key.Id}-date")"
+                                                       class="nx-select nx-date-inline"
+                                                       min="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")"
+                                                       max="@key.ExpiresAt?.AddDays(-1).ToString("yyyy-MM-dd")" />
+                                                <button type="submit" class="nx-btn">Set</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </details>
+                            }
+                        </td>
+                        <td>
+                            @if (key.RevokedAt is not null)
+                            {
+                                <span class="nx-badge">revoked</span>
+                            }
+                            else
+                            {
+                                <div class="nx-row-actions">
+                                    @* Renew rather than "show me the secret again": the server
+                                       cannot show it again, so the honest equivalent is a new
+                                       secret with the same permissions and the old one revoked
+                                       in the same step — no window where both work. *@
+                                    <form method="post" @formname="@($"renew-{key.Id}")" @onsubmit="() => RenewAsync(key.Id)">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="nx-btn">Renew</button>
+                                    </form>
+                                    <form method="post" @formname="@($"revoke-{key.Id}")" @onsubmit="() => RevokeAsync(key.Id)">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="nx-btn nx-btn-danger">Revoke</button>
+                                    </form>
+                                </div>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+
+        <h3>Create a key</h3>
+        @* No <AntiforgeryToken /> here on purpose. EditForm emits one itself in server-side
+           rendering; adding a second produces two hidden inputs with the same name, the two
+           values arrive as "token1,token2", and deserialisation fails with "the antiforgery
+           token could not be decrypted" — which reads like a key problem and is not one.
+           The plain <form> elements above do need it, because only EditForm adds it. *@
+        <EditForm Model="Form" FormName="create-key" OnValidSubmit="CreateAsync">
+
+            <label class="nx-field">
+                <span>Label</span>
+                @* Form! throughout: OnInitializedAsync seeds it, and keeping the binding
+                   expressions rooted at the same property the framework binds into is what
+                   makes the posted field names line up. *@
+                <InputText @bind-Value="Form!.Label" placeholder="my plugin, my laptop" />
+            </label>
+
+            <label class="nx-field">
+                <span>Expires on — leave empty for a key that never expires</span>
+                @* A date, not a duration, because that is the question people actually have an
+                   answer to ("until the end of the season"). An expiring key is the cheaper
+                   mistake: one that outlives its purpose keeps working for whoever finds it. *@
+                <input type="date" name="Form.ExpiresOn" class="nx-select"
+                       min="@DateTime.UtcNow.AddDays(1).ToString("yyyy-MM-dd")"
+                       value="@Form.ExpiresOn?.ToString("yyyy-MM-dd")" />
+            </label>
+
+            @if (Catalogue.Count == 0)
+            {
+                @* No registry composed in, or nothing registered yet. Free text is the honest
+                   fallback: an empty picker would look like the server is broken. *@
+                <label class="nx-field">
+                    <span>Contract — leave empty for any</span>
+                    <InputText @bind-Value="Form.Contract" placeholder="@Contract" />
+                </label>
+
+                <label class="nx-field">
+                    <span>Scopes — comma separated, from the contract</span>
+                    <InputText @bind-Value="Form.Scopes" placeholder="reports:push, venues:pull" />
+                </label>
+            }
+            else
+            {
+                @* No contract field. A key may span several, and the ticked boxes already
+                   say which — asking twice invites the two answers to disagree. *@
+                <fieldset class="nx-scopes">
+                    <legend>Permissions</legend>
+                    <p class="nx-muted">
+                        Tick what the plugin needs. Permissions from several contracts may share
+                        one key — useful when a plugin offers a single field to paste a token
+                        into. Grant only what is used: the difference between a leak that costs
+                        one feature and one that costs everything on this server.
+                    </p>
+
+                    @* Indexed names with a hidden partner per row, not one repeated name.
+                       Blazor's form mapper reads collections as Form.X[0], Form.X[1] — several
+                       inputs sharing a single name bind nothing at all. And because an unticked
+                       checkbox posts no value, the hidden field is what keeps the indices
+                       contiguous; without it the first untick would shift every row after it. *@
+                    @* Built-in, and above the contracts because it is not one of them: it
+                       governs whether this key may read contract documents at all. *@
+                    <div class="nx-scope-group">
+                        <h4>Built-in</h4>
+                        <input type="hidden" name="Form.ReadContractsOffered" value="true" />
+                        <label class="nx-check">
+                            <input type="checkbox" name="Form.ReadContracts" value="true"
+                                   data-nx-read-all checked="@Form.ReadContracts" />
+                            <span class="nx-check-body">
+                                <span class="nx-check-title">
+                                    Read contract documents from this server
+                                    <code class="nx-mono">@QualifiedScope.ReadContracts</code>
+                                </span>
+                                <span class="nx-muted">
+                                    Lets the client fetch the schema instead of shipping its own —
+                                    and then the server's version of a contract is the one that
+                                    counts. Without it the client must already know the contract,
+                                    and the server tells nobody what it holds.
+                                </span>
+                            </span>
+                        </label>
+                    </div>
+
+                    @foreach (var group in Rows.GroupBy(r => r.Option.ContractId, StringComparer.Ordinal))
+                    {
+                        <details class="nx-scope-group" data-nx-scope-group="@group.Key"
+                                 open="@group.Any(r => r.Choice.Selected)">
+                            @* Open when something in it is ticked — a choice hidden behind a
+                               closed fold is the one mistake this pattern makes. *@
+                            <summary>
+                                <strong>@group.Key</strong>
+                                <span class="nx-muted">
+                                    @group.Count() permission@(group.Count() == 1 ? "" : "s")@(
+                                        group.Count(r => r.Choice.Selected) is var n && n > 0 ? $" · {n} selected" : "")
+                                </span>
+                            </summary>
+                            @foreach (var row in group)
+                            {
+                                @* The hidden partners are what make this bind. An unticked box
+                                   posts nothing, so without them the indices would collapse and
+                                   every row after the first untick would shift onto the wrong
+                                   scope — silently granting something nobody chose. *@
+                                <input type="hidden" name="Form.Choices[@row.Index].ContractId" value="@row.Option.ContractId" />
+                                <input type="hidden" name="Form.Choices[@row.Index].Scope" value="@row.Option.Scope" />
+                                <label class="nx-check">
+                                    <input type="checkbox"
+                                           name="Form.Choices[@row.Index].Selected"
+                                           value="true"
+                                           data-nx-read-one="@(row.Option.Scope == QualifiedScope.ReadContracts)"
+                                           checked="@row.Choice.Selected" />
+                                    <span class="nx-check-body">
+                                        <span class="nx-check-title">
+                                            @Headline(row.Option)
+                                            <code class="nx-mono">@row.Option.Scope</code>
+                                        </span>
+                                        <span class="nx-muted">@Detail(row.Option)</span>
+                                    </span>
+                                </label>
+                            }
+                        </details>
+                    }
+                </fieldset>
+
+                @* Grey the alternatives out. The global grant makes every per-contract one
+                   redundant, so showing both as live choices would invite a combination that
+                   the server then silently collapses. Enforcement is server-side regardless —
+                   a posted form can claim anything, and this only saves the reader a mistake. *@
+                <script>
+                    (function () {
+                        var all = document.querySelector('[data-nx-read-all]');
+                        var ones = Array.prototype.slice.call(
+                            document.querySelectorAll('[data-nx-read-one="True"]'));
+                        if (!all || ones.length === 0) return;
+
+                        function apply() {
+                            var anyOne = ones.some(function (b) { return b.checked; });
+
+                            ones.forEach(function (b) {
+                                b.disabled = all.checked;
+                                b.closest('label').style.opacity = all.checked ? 0.45 : 1;
+                            });
+
+                            all.disabled = anyOne;
+                            all.closest('label').style.opacity = anyOne ? 0.45 : 1;
+                        }
+
+                        all.addEventListener('change', apply);
+                        ones.forEach(function (b) { b.addEventListener('change', apply); });
+                        apply();
+                    })();
+                </script>
+
+            }
+
+            @if (Problem is { Length: > 0 })
+            {
+                <p class="nx-warn">@Problem</p>
+            }
+
+            <button type="submit" class="nx-btn nx-btn-primary">Create key</button>
+        </EditForm>
+    }
+</div>
+
+@code {
+    /// <summary>Heading above the manager.</summary>
+    [Parameter] public string Heading { get; set; } = "API keys";
+
+    /// <summary>Pre-fills the contract field, and scopes the list when set.</summary>
+    [Parameter] public string? Contract { get; set; }
+
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    // No property initializer: on a post that carries no form data the framework assigns null
+    // over it, and an initializer would give the false impression that cannot happen. Seeded
+    // in OnInitializedAsync instead, which runs after parameters are supplied.
+    [SupplyParameterFromForm(FormName = "create-key")]
+    private CreateKeyForm? Form { get; set; }
+
+    private IReadOnlyList<ApiKeyEntity> Keys { get; set; } = [];
+    private string? Revealed { get; set; }
+    private string? Problem { get; set; }
+
+    private Guid? AccountId =>
+        Guid.TryParse(Http?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value, out var id) ? id : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Form ??= new CreateKeyForm();
+        SeedChoices();
+
+        // Redeem the ticket the redirect carried. One shot: a reload of the same URL finds
+        // nothing, which is what stops the secret lingering in history.
+        if (Guid.TryParse(Http?.Request.Query["reveal"], out var ticket))
+            Revealed = Reveals.Redeem(ticket);
+
+        await LoadAsync();
+    }
+
+    /// <summary>Sends the browser to a plain GET, carrying the ticket that reveals a key.</summary>
+    private void Redirect(Guid ticket) => Nav.NavigateTo($"/account/keys?reveal={ticket}");
+
+    /// <summary>Turns a chosen date into the lifetime the issuer wants. Null means forever.</summary>
+    private static TimeSpan? Lifetime(DateOnly? expiresOn)
+    {
+        if (expiresOn is not { } date) return null;
+
+        // End of the chosen day, so "valid until the 30th" includes the 30th.
+        var expiry = new DateTimeOffset(date.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+        var span = expiry - DateTimeOffset.UtcNow;
+
+        // A date already past would otherwise issue a key that is dead on arrival.
+        return span > TimeSpan.Zero ? span : TimeSpan.FromMinutes(1);
+    }
+
+    /// <summary>
+    /// Brings a key's expiry forward, without touching its secret.
+    /// <para>The date is read straight from the request rather than through a bound model:
+    /// one field per row would otherwise mean one model property per row, and the rows are
+    /// only known at render time.</para>
+    /// </summary>
+    /// <summary>
+    /// Reloads the account's keys.
+    /// <para>Filtered by <see cref="Contract"/> when the component was embedded for one:
+    /// a page about a single contract should not list keys that have nothing to do with it.
+    /// Keys not restricted to any contract are always shown, because they do apply.</para>
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        if (AccountId is not { } id) return;
+
+        var all = await Issuer.ListAsync(id, CancellationToken.None).ConfigureAwait(false);
+
+        Keys = Contract is { Length: > 0 }
+            ? all.Where(k => k.ContractId is null || k.ContractId == Contract).ToArray()
+            : all;
+    }
+
+    private async Task ShortenAsync(Guid keyId)
+    {
+        Problem = null;
+
+        var raw = Http?.Request.Form[$"expiry-{keyId}-date"].ToString();
+        if (!DateOnly.TryParse(raw, CultureInfo.InvariantCulture, out var date))
+        {
+            Problem = "Pick a date first.";
+            return;
+        }
+
+        // End of the chosen day, matching what the create form means by a date.
+        var expiry = new DateTimeOffset(date.ToDateTime(TimeOnly.MaxValue), TimeSpan.Zero);
+
+        if (!await Issuer.ShortenExpiryAsync(keyId, expiry, CancellationToken.None).ConfigureAwait(false))
+        {
+            Problem = "That date does not shorten the key. An expiry can be brought forward or "
+                      + "set on a key that had none, but not pushed further out — create a new "
+                      + "key for that, or revoke this one.";
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>The scopes without their contract prefix — the contract has its own column.</summary>
+    private static IEnumerable<string> BareScopes(ApiKeyEntity key) =>
+        key.Scopes.Select(s => QualifiedScope.TryParse(s, out _, out var bare) ? bare : s)
+                  .Distinct(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Which contracts a key actually reaches.
+    /// <para>Read from the scopes rather than from the restriction column: a key spanning
+    /// several has no single restriction, and "any" would be a misleading way to say "these
+    /// three".</para>
+    /// </summary>
+    private static string ContractsOf(ApiKeyEntity key)
+    {
+        var fromScopes = key.Scopes
+            .Select(s => QualifiedScope.TryParse(s, out var contract, out _) ? contract : null)
+            .Where(c => c is not null)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (fromScopes.Length > 0) return string.Join(", ", fromScopes);
+        return key.ContractId ?? "any";
+    }
+
+    /// <summary>Whether a key already carries this catalogue entry, in either spelling.</summary>
+    private static bool Holds(ApiKeyEntity key, ScopeOption option) =>
+        key.Scopes.Contains(QualifiedScope.Of(option.ContractId, option.Scope), StringComparer.Ordinal)
+        || (string.Equals(key.ContractId, option.ContractId, StringComparison.Ordinal)
+            && key.Scopes.Contains(option.Scope, StringComparer.Ordinal));
+
+    /// <summary>
+    /// Replaces a key's permissions with whatever was ticked.
+    /// <para>Read from the request rather than a bound model: one list per row would mean one
+    /// model property per row, and the rows only exist at render time.</para>
+    /// </summary>
+    private async Task SaveScopesAsync(Guid keyId)
+    {
+        Problem = null;
+
+        var chosen = Http?.Request.Form[$"scope-{keyId}"].ToArray() ?? [];
+        var scopes = chosen.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!).ToArray();
+
+        if (scopes.Length == 0)
+        {
+            Problem = "A key needs at least one permission. Revoke it instead of emptying it.";
+            return;
+        }
+
+        // The global grant makes the per-contract ones redundant; storing both would leave
+        // scopes on the key that change nothing.
+        if (scopes.Contains(QualifiedScope.ReadContracts, StringComparer.Ordinal))
+        {
+            scopes = scopes
+                .Where(s => !(QualifiedScope.TryParse(s, out _, out var tail)
+                              && string.Equals(tail, QualifiedScope.ReadContracts, StringComparison.Ordinal)))
+                .ToArray();
+        }
+
+        // Same rule as issuing: pinned when the choices name one contract, unrestricted when
+        // they name several — a stale restriction would silently disable the new scopes.
+        var contracts = scopes
+            .Select(s => QualifiedScope.TryParse(s, out var c, out _) ? c : null)
+            .Where(c => c is not null)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        try
+        {
+            await Issuer.SetScopesAsync(
+                keyId, scopes, contracts.Length == 1 ? contracts[0] : null, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+        catch (ArgumentException ex)
+        {
+            Problem = ex.Message;
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>How long a key is good for, in words.</summary>
+    private static string ExpiryText(ApiKeyEntity key)
+    {
+        if (key.ExpiresAt is not { } expiry) return "never expires";
+
+        var left = expiry - DateTimeOffset.UtcNow;
+        if (left <= TimeSpan.Zero) return $"expired {expiry:yyyy-MM-dd}";
+
+        var days = (int)left.TotalDays;
+        return days >= 1
+            ? $"{expiry:yyyy-MM-dd} ({days} day{(days == 1 ? "" : "s")} left)"
+            : $"{expiry:yyyy-MM-dd} (today)";
+    }
+
+    /// <summary>
+    /// Replaces a key's secret, keeping everything else, and revokes the old one in the same
+    /// step so there is never a moment when both work.
+    /// </summary>
+    private async Task RenewAsync(Guid keyId)
+    {
+        Problem = null;
+
+        var rotated = await Issuer.RotateAsync(keyId, CancellationToken.None).ConfigureAwait(false);
+        if (rotated is null)
+        {
+            Problem = "That key can no longer be renewed. A revoked key stays revoked.";
+            await LoadAsync();
+            return;
+        }
+
+        Redirect(Reveals.Stash(rotated));
+    }
+
+
+    private async Task CreateAsync()
+    {
+        Problem = null;
+
+        if (AccountId is not { } id) return;
+        if (Form is not { } form) return;
+
+        // Ticked boxes when there is a catalogue, the text field when there is not.
+        var ticked = Rows.Where(r => r.Choice.Selected).ToArray();
+
+        var scopes = Catalogue.Count > 0
+            // Qualified, so a key spanning contracts stays unambiguous about which
+            // observations:push it means.
+            ? ticked.Select(r => QualifiedScope.Of(r.Option.ContractId, r.Option.Scope))
+                    .Distinct(StringComparer.Ordinal).ToArray()
+            : (form.Scopes ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (scopes.Length == 0 && !(Catalogue.Count > 0 && form.ReadContracts))
+        {
+            Problem = Catalogue.Count > 0
+                ? "Tick at least one permission."
+                : "Give at least one scope, e.g. reports:push.";
+            return;
+        }
+
+        if (Catalogue.Count > 0 && form.ReadContracts)
+        {
+            // The global grant wins, so the per-contract ones are dropped rather than stored
+            // alongside it. Keeping both would put scopes on the key that change nothing, and
+            // nobody reading it later could say why they were there.
+            scopes = scopes
+                .Where(s => !(QualifiedScope.TryParse(s, out _, out var tail)
+                              && string.Equals(tail, QualifiedScope.ReadContracts, StringComparison.Ordinal)))
+                .Append(QualifiedScope.ReadContracts)
+                .ToArray();
+        }
+
+        string? restriction = null;
+        if (Catalogue.Count > 0)
+        {
+            var contracts = ticked.Select(r => r.Option.ContractId)
+                .Distinct(StringComparer.Ordinal).ToArray();
+
+            // Pinned when the choices name exactly one contract, unrestricted when they name
+            // several. The restriction is a second, coarser gate — leaving it set to one
+            // contract while granting scopes on another would silently disable those.
+            restriction = contracts.Length == 1 ? contracts[0] : null;
+        }
+        else
+        {
+            restriction = string.IsNullOrWhiteSpace(form.Contract) ? Contract : form.Contract;
+        }
+
+        try
+        {
+            var issued = await Issuer.IssueAsync(
+                id,
+                scopes,
+                restriction,
+                form.Label,
+                Lifetime(form.ExpiresOn),
+                CancellationToken.None);
+
+            // Post/Redirect/Get. Without the redirect the browser keeps a POST it can repeat,
+            // and F5 issues a second key, and Back a third — which is exactly what happened.
+            // The secret travels by ticket so it never reaches the address bar.
+            Redirect(Reveals.Stash(issued.Key));
+            return;
+        }
+        catch (ArgumentException ex)
+        {
+            // A malformed scope. Shown as-is: the message names the offending value, which is
+            // exactly what the person needs.
+            Problem = ex.Message;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task RevokeAsync(Guid keyId)
+    {
+        await Issuer.RevokeAsync(keyId, CancellationToken.None);
+        await LoadAsync();
+    }
+
+    /// <summary>
+    /// The grantable scopes, or empty when this server has no registry composed in.
+    /// <para>Asked per render rather than cached: contracts can be registered while the
+    /// server runs, and a picker showing yesterday's list is worse than a slow one.</para>
+    /// </summary>
+    private IReadOnlyList<ScopeOption> Catalogue =>
+        Services.GetService<IScopeCatalog>()?.Available() ?? [];
+
+    /// <summary>One rendered checkbox: its index in the posted list, its state, its meaning.</summary>
+    private sealed record ScopeRow(int Index, ScopeChoice Choice, ScopeOption Option);
+
+    /// <summary>
+    /// The rows to render, pairing each bound choice with the catalogue entry describing it.
+    /// <para>Matched on contract <i>and</i> scope, never scope alone: two contracts may both
+    /// declare <c>observations:push</c>, and they are different permissions.</para>
+    /// </summary>
+    private IReadOnlyList<ScopeRow> Rows
+    {
+        get
+        {
+            if (Form is not { } form) return [];
+
+            var catalogue = Catalogue;
+            var rows = new List<ScopeRow>(form.Choices.Count);
+
+            for (var index = 0; index < form.Choices.Count; index++)
+            {
+                var choice = form.Choices[index];
+                var option = catalogue.FirstOrDefault(o =>
+                    string.Equals(o.ContractId, choice.ContractId, StringComparison.Ordinal)
+                    && string.Equals(o.Scope, choice.Scope, StringComparison.Ordinal));
+
+                // A posted row naming something the catalogue no longer has — a contract
+                // unregistered mid-session. Dropped rather than rendered blank.
+                if (option is not null) rows.Add(new ScopeRow(index, choice, option));
+            }
+
+            return rows;
+        }
+    }
+
+    /// <summary>
+    /// Fills the choice list from the catalogue, once, for a freshly rendered form.
+    /// <para>Skipped when the post already carried choices, because those are the user's.</para>
+    /// </summary>
+    private void SeedChoices()
+    {
+        if (Form is null || Form.Choices.Count > 0) return;
+
+        foreach (var option in Catalogue)
+            Form.Choices.Add(new ScopeChoice { ContractId = option.ContractId, Scope = option.Scope });
+    }
+
+    /// <summary>What granting this lets the plugin do, in words rather than in scope grammar.</summary>
+    private static string Headline(ScopeOption option) => option.Verb == "push"
+        ? $"Send {option.Collection} to this server"
+        : $"Read {option.Collection} from this server";
+
+    /// <summary>
+    /// The consequences worth knowing before ticking a box, all of them declared by the
+    /// contract itself — so the description cannot claim something the server does not enforce.
+    /// </summary>
+    private static string Detail(ScopeOption option)
+    {
+        var parts = new List<string> { $"{option.FieldCount} field{(option.FieldCount == 1 ? "" : "s")}" };
+
+        if (option.Verb == "push")
+        {
+            parts.Add(option.Retention is { } retention
+                ? $"kept {retention}, then deleted"
+                : "kept indefinitely");
+
+            if (option.PerMinute is { } perMinute) parts.Add($"up to {perMinute} records a minute");
+        }
+        else
+        {
+            parts.Add("read-only — a key with this cannot change anything");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private sealed class CreateKeyForm
+    {
+        public string? Label { get; set; }
+        public string? Contract { get; set; }
+
+        /// <summary>
+        /// One entry per grantable scope, ticked or not. Bound by index, not by repeated name.
+        /// </summary>
+        public List<ScopeChoice> Choices { get; set; } = [];
+
+        /// <summary>Free-text fallback, used only when this server has no scope catalogue.</summary>
+        public string? Scopes { get; set; }
+
+        /// <summary>Last day the key works. Null means it never expires.</summary>
+        public DateOnly? ExpiresOn { get; set; }
+
+        /// <summary>Whether the built-in contract-reading scope is granted.</summary>
+        public bool ReadContracts { get; set; }
+    }
+
+    /// <summary>
+    /// One scope and whether it is ticked. Carries the contract as well, because a scope
+    /// string is only unique within one.
+    /// </summary>
+    private sealed class ScopeChoice
+    {
+        public string ContractId { get; set; } = string.Empty;
+        public string Scope { get; set; } = string.Empty;
+        public bool Selected { get; set; }
+    }
+}

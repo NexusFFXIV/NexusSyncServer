@@ -1,0 +1,22 @@
+@*
+    Routing plus the default shell.
+
+    Module assemblies are added by UseNexusSyncServer, so this file does not list them — adding a
+    module must not mean editing the router.
+*@
+@using NexusSyncServer.Hosting.Modules
+@using NexusSyncServer.Ux
+@inject IEnumerable<IPortalPageModule> PageModules
+
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(ServerLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1, h2" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(ServerLayout)">
+            <h2>Not found</h2>
+            <p class="nx-muted">There is no page at this address.</p>
+        </LayoutView>
+    </NotFound>
+</Router>

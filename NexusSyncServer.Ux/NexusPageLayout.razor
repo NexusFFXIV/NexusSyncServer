@@ -1,0 +1,48 @@
+@*
+    The default shell every built-in page sits in.
+
+    Deliberately plain HTML and one stylesheet — no component library, no build step, no
+    JavaScript. A server operator should be able to read this, understand it, and replace it
+    without learning a front-end toolchain, and a page that renders without JS keeps working
+    when something in the browser does not.
+*@
+@*
+    Deliberately NOT inheriting LayoutComponentBase. A layout's content arrives as `Body`,
+    which cannot be supplied as child content by a caller — and this has to be usable both as
+    the guts of a layout and as a plain wrapper inside someone else's page.
+*@
+
+<div class="nx-shell">
+    <header class="nx-header">
+        <a class="nx-brand" href="/">@Brand</a>
+        <nav class="nx-nav">
+            @NavItems
+        </nav>
+        <div class="nx-header-right">
+            @HeaderRight
+        </div>
+    </header>
+
+    <main class="nx-main">
+        @ChildContent
+    </main>
+
+    <footer class="nx-footer">
+        <span>@Brand</span>
+        <span class="nx-muted">Powered by NexusSyncServer</span>
+    </footer>
+</div>
+
+@code {
+    /// <summary>Name shown in the header and footer.</summary>
+    [Parameter] public string Brand { get; set; } = "NexusSyncServer";
+
+    /// <summary>Navigation links, rendered into the header.</summary>
+    [Parameter] public RenderFragment? NavItems { get; set; }
+
+    /// <summary>Right-hand header slot — typically the signed-in user and a sign-out button.</summary>
+    [Parameter] public RenderFragment? HeaderRight { get; set; }
+
+    /// <summary>The page content.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,28 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "github-actions"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "nuget"]
+    groups:
+      # Group EF Core + Microsoft.Extensions together — EF Core pulls in specific
+      # Microsoft.Extensions.* versions transitively, so bumping them separately
+      # often produces NU1605 package-downgrade errors. One coordinated bump
+      # avoids the collision class entirely.
+      microsoft-platform:
+        patterns:
+          - "Microsoft.Extensions.*"
+          - "Microsoft.EntityFrameworkCore*"
+          - "Microsoft.Data.Sqlite*"

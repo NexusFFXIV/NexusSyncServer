@@ -1,0 +1,22 @@
+@*
+    The default mounting of NexusSignIn. Four lines on purpose — the component is the
+    reusable thing, this page only exists so a server with no custom interface still works.
+*@
+@page "/account/signin"
+@namespace NexusSyncServer.Modules.Auth.Pages
+
+<PageTitle>Sign in</PageTitle>
+
+<NexusSignIn Error="@Error" ReturnUrl="@ReturnUrl" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    private string? Error { get; set; }
+
+    /// <summary>
+    /// Where to land afterwards. Named <c>ReturnUrl</c> because that is the key the cookie
+    /// authentication handler appends when it sends an anonymous visitor here.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "ReturnUrl")]
+    private string? ReturnUrl { get; set; }
+}

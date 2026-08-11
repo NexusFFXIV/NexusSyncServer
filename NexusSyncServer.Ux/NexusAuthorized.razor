@@ -1,0 +1,45 @@
+@*
+    Renders its content only when the signed-in user carries a scope.
+
+    A convenience for tidy pages — NOT access control. It decides what to draw, and a URL is
+    reachable whether or not something linked to it. The page itself must still check, and the
+    API always does regardless of what any page thinks.
+*@
+@using System.Security.Claims
+
+@if (Allowed)
+{
+    @ChildContent
+}
+else
+{
+    @Denied
+}
+
+@code {
+    /// <summary>The signed-in user.</summary>
+    [Parameter, EditorRequired] public ClaimsPrincipal? User { get; set; }
+
+    /// <summary>Scope required to see <see cref="ChildContent"/>. Null means "signed in is enough".</summary>
+    [Parameter] public string? Scope { get; set; }
+
+    /// <summary>Require the operator role as well.</summary>
+    [Parameter] public bool RequireOperator { get; set; }
+
+    /// <summary>Shown when allowed.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Shown when not. Nothing by default, so the section simply disappears.</summary>
+    [Parameter] public RenderFragment? Denied { get; set; }
+
+    private bool Allowed
+    {
+        get
+        {
+            if (User?.Identity?.IsAuthenticated != true) return false;
+            if (RequireOperator && !User.IsInRole("operator")) return false;
+
+            return Scope is null || User.HasClaim("scope", Scope);
+        }
+    }
+}
