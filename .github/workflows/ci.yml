@@ -207,14 +207,23 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Pack
+        env:
+          # Pack restores, and the restore reaches the organisation feed for NexusKit.Sync.
+          GITHUB_PACKAGES_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet pack NexusSyncServer.sln -c Release -o ./artifacts
 
       - name: Push to GitHub Packages
         shell: pwsh
+        # Straight at the URL with an api-key, rather than registering a named source first.
+        # `dotnet nuget add source` writes to the user-level config, and this repository's
+        # nuget.config opens with <clear /> — so the name was defined and then discarded,
+        # and the push failed with "the specified source 'github' is invalid".
         run: |
-          dotnet nuget add source --username "${{ github.actor }}" --password "${{ secrets.GITHUB_TOKEN }}" --store-password-in-clear-text --name github "https://nuget.pkg.github.com/NexusFFXIV/index.json"
-          Get-ChildItem ./artifacts -Filter *.nupkg | ForEach-Object {
-            dotnet nuget push $_.FullName --source github --skip-duplicate
+          Get-ChildItem ./artifacts/*.nupkg | ForEach-Object {
+            dotnet nuget push $_.FullName `
+              --source https://nuget.pkg.github.com/NexusFFXIV/index.json `
+              --api-key ${{ secrets.GITHUB_TOKEN }} `
+              --skip-duplicate
           }
 
       - name: Upload artifacts
@@ -232,3 +241,14 @@ jobs:
             ./artifacts/*.snupkg
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+
+      # Folds the NexusKit and NexusKit.Modules changelogs into these notes. The server is an
+      # end product like the plugin: whoever reads its release should not have to visit three
+      # repositories to learn that the protocol moved underneath it.
+      #
+      # Advisory — a failure here costs annotation, not the release.
+      - name: Expand internal dependency changelog
+        continue-on-error: true
+        uses: NexusFFXIV/.github/.github/actions/expand-internal-deps-changelog@main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
