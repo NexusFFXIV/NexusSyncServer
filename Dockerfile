@@ -22,14 +22,11 @@ COPY . .
 #             passed as a BuildKit secret rather than a build arg so the token never lands in
 #             an image layer or in `docker history`.
 #
-# nuget.config lists local-packages unconditionally; an empty folder simply contributes
-# nothing, and a published version wins on version order.
-RUN --mount=type=secret,id=nuget_auth,required=false \
-    if [ -f /run/secrets/nuget_auth ]; then \
-        cp /run/secrets/nuget_auth /root/.nuget/NuGet/NuGet.Config 2>/dev/null \
-        || { mkdir -p /root/.nuget/NuGet && cp /run/secrets/nuget_auth /root/.nuget/NuGet/NuGet.Config; }; \
-    fi; \
-    dotnet restore NexusSyncServer.sln
+# Over ./nuget.config, not into the user profile. The repository's own file sits in the working
+# directory and wins there, and its credential is a %GITHUB_PACKAGES_PAT% placeholder that
+# nothing sets inside a container — left in place it answers 401 whatever the profile says.
+# Replacing it is the only arrangement where the mounted secret actually takes effect.
+RUN --mount=type=secret,id=nuget_auth,required=false     if [ -f /run/secrets/nuget_auth ]; then         cp /run/secrets/nuget_auth ./nuget.config;     fi;     dotnet restore NexusSyncServer.sln
 
 # Version comes from outside because .git is not in the build context, so MinVer has no tags
 # to read. CI passes the release tag; a local build gets a clearly-local default rather than a
