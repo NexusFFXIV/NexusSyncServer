@@ -139,13 +139,24 @@ jobs:
             <packageSources>
               <clear />
               <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
-              <add key="nexusffxiv" value="https://nuget.pkg.github.com/NexusFFXIV/index.json" />
+              <add key="github-nexusffxiv" value="https://nuget.pkg.github.com/NexusFFXIV/index.json" />
             </packageSources>
+            <!-- Mirrors the repository's nuget.config. Central package management raises
+                 NU1507 for more than one unmapped source, and the source key must match the
+                 one the mapping names — a mismatch resolves NexusKit.* from nowhere. -->
+            <packageSourceMapping>
+              <packageSource key="nuget.org">
+                <package pattern="*" />
+              </packageSource>
+              <packageSource key="github-nexusffxiv">
+                <package pattern="NexusKit.*" />
+              </packageSource>
+            </packageSourceMapping>
             <packageSourceCredentials>
-              <nexusffxiv>
+              <github-nexusffxiv>
                 <add key="Username" value="GITHUB_ACTOR_PLACEHOLDER" />
                 <add key="ClearTextPassword" value="GITHUB_TOKEN_PLACEHOLDER" />
-              </nexusffxiv>
+              </github-nexusffxiv>
             </packageSourceCredentials>
           </configuration>
           CONFIG

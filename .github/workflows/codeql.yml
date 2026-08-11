@@ -37,6 +37,10 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build
+        env:
+          # NexusKit.Sync comes from the organisation feed, which needs a token even for
+          # a read. Without it restore answers 401 and the analysis never starts.
+          GITHUB_PACKAGES_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: dotnet build NexusSyncServer.sln -c Release
 
       - name: Perform CodeQL Analysis

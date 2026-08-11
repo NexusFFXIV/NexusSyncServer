@@ -51,12 +51,103 @@ image with your own modules is two lines of Dockerfile.
 
 ## Run it
 
+The published image carries **no contracts**. That is what lets one image serve every author:
+you supply yours through a volume, and the server registers them at startup.
+
+### 1. A contract
+
+Write a `*.json` document describing your datasets, or start from
+[`samples/example.showcase.json`](samples/). The format and its rules are in
+[`contracts/README.md`](contracts/README.md).
+
 ```bash
-docker compose up
+mkdir -p contracts
+cp samples/example.showcase.json contracts/
 ```
 
-That starts the server and a MariaDB instance. Then register a contract and issue a key —
-see `docs/` once it exists, or `CONTRIBUTING.md` for the development loop.
+### 2. A compose file
+
+```yaml
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: nexussyncserver
+      MARIADB_USER: nexussyncserver
+      MARIADB_PASSWORD: ${DB_PASSWORD:?set it in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set it in .env}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    image: ghcr.io/nexusffxiv/nexussyncserver:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        # Not just "started": without this the server races the database on a cold
+        # start and dies on its first migration.
+        condition: service_healthy
+    environment:
+      Storage__ConnectionString: "Server=db;Port=3306;Database=nexussyncserver;User Id=nexussyncserver;Password=${DB_PASSWORD};"
+
+      # Sign-in is off unless configured. A server with neither provider still works —
+      # keys are then issued by the operator with --issue-key.
+      Auth__XivAuth__Enabled: "true"
+      Auth__XivAuth__ClientId: "${XIVAUTH_CLIENT_ID}"
+      Auth__XivAuth__ClientSecret: "${XIVAUTH_CLIENT_SECRET}"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Your contracts. Read-only: the server never writes here, and a writable mount
+      # would let a bug edit the definitions it is being held to.
+      - ./contracts:/contracts:ro
+
+      # Data-protection keys, which sign the sign-in cookie and every form token.
+      # Without this volume they live inside the container, so recreating it signs
+      # everyone out and rejects any page that was already open.
+      - dataprotection-keys:/home/nexussyncserver/.aspnet/DataProtection-Keys
+
+volumes:
+  mariadb-data:
+  dataprotection-keys:
+```
+
+Register the callback `https://your-host/account/signin/xivauth/callback` with the provider —
+the server derives it from the incoming request, so it must match the address people actually
+use.
+
+### 3. Up
+
+```bash
+docker compose up -d
+docker compose logs server | grep Registered
+```
+
+### 4. A key
+
+Sign in at `http://localhost:8080`, then create one under **API keys** — pick the permissions
+from the list, which is built from your contracts. Paste it into the plugin's settings.
+
+Without a sign-in provider, issue one from the command line instead:
+
+```bash
+docker compose exec server /app/NexusSyncServer --issue-key     --scopes example.showcase/observations:push     --label "my plugin"
+```
+
+### Adding a contract later
+
+Drop the file into `contracts/` and restart the server. Registration is idempotent, so existing
+documents re-register to no effect and nothing else is disturbed.
+
+```bash
+cp acme.myplugin.json contracts/ && docker compose restart server
+```
 
 ## Security posture
 
