@@ -37,11 +37,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The sync norm, shared with the plugin side. Open-ended range on purpose: the local
-         workspace swaps it for a ProjectReference and CI takes the newest published package.
+    <!-- The sync norm, shared with the plugin side. 0.5.1 is the release it first shipped in;
+         a floor naming an earlier one restores the substitute and fails on NU1603, which
+         TreatWarningsAsErrors turns into a build error.
+
+         Open-ended range on purpose: the local workspace swaps it for a ProjectReference and
+         CI takes the newest published package.
          Do not let a bump turn it into an exact pin — a pinned protocol package is how a
          server ends up unable to serve clients that have moved on. -->
-    <PackageVersion Include="NexusKit.Sync" Version="[0.5.0,)" />
+    <PackageVersion Include="NexusKit.Sync" Version="[0.5.1,)" />
   </ItemGroup>
 
   <ItemGroup>
