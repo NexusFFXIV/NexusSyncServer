@@ -14,12 +14,13 @@
 | `NexusSyncServer.Hosting`, `.Ux`, `.Modules.*` | GitHub Packages | authors composing their own image |
 | GitHub Release | this repository | humans, with the whole stack's changes folded in |
 
-The image is built by **CI**, on every push to `main` and again with a version tag. The packages
-and the release come from **`release.yml`**, only on a tag.
+All of it comes from **`ci.yml`**. The image builds on every push to `main` and again with a
+version tag; the `release` job runs only on a tag, after `build`, `audit` and `image` have
+passed.
 
-Split that way deliberately: an image that existed only at release time would leave `main`
-unbuildable-in-practice between tags, and packages published on every push would flood the feed
-with versions nobody asked for.
+One workflow on purpose. A separate release workflow would repeat the restore, the build and
+the pack, and the two would drift — the first attempt at this repository had exactly that, and
+the duplicate packed against an unauthenticated feed while the original did not.
 
 ## The chain
 
@@ -66,7 +67,8 @@ before running `docker pull`.
    git push origin v0.2.0
    ```
 
-4. Watch both workflows. CI publishes the image, `release.yml` the packages and the release.
+4. Watch CI. The `image` job publishes the container, then `release` packs, pushes and writes
+   the notes.
 5. Check the release notes: the internal-dependency step should have appended the NexusKit and
    NexusKit.Modules entries beneath the generated ones.
 
