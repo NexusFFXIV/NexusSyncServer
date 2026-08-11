@@ -41,3 +41,7 @@ local-packages/
 # Local credential mount. Entirely ignored, and nothing is committed to make it exist —
 # a folder whose whole purpose is to hold secrets has no business being tracked at all.
 secrets/
+
+# Contracts are supplied per deployment through a volume mount, never committed. A local
+# folder here is convenient for docker compose and belongs to nobody else.
+/contracts/

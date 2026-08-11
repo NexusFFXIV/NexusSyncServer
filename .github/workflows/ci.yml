@@ -63,6 +63,8 @@ jobs:
         run: dotnet restore NexusSyncServer.sln
 
       - name: Audit NuGet dependencies for known vulnerabilities
+        env:
+          GITHUB_PACKAGES_PAT: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $output = dotnet list NexusSyncServer.sln package --vulnerable --include-transitive 2>&1 | Out-String
@@ -75,6 +77,8 @@ jobs:
           }
 
       - name: List outdated NuGet dependencies (informational)
+        env:
+          GITHUB_PACKAGES_PAT: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
         run: dotnet list NexusSyncServer.sln package --outdated --include-transitive
 
