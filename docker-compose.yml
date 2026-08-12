@@ -29,6 +29,12 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-0.0.0-local}
+
+        # This is the development stack, so it builds against the sibling NexusKit.Sync rather
+        # than the published package — run localdev/pack-local-deps.ps1 first. The Dockerfile
+        # defaults to the feed, which is what CI and a build from a tag want; overriding it
+        # belongs here, in the file that is only ever used while working on the thing.
+        DEPS: ${DEPS:-local}
     restart: unless-stopped
     depends_on:
       db:

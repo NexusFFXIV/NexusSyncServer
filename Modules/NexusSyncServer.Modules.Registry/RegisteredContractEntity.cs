@@ -30,4 +30,18 @@ public sealed class RegisteredContractEntity
 
     /// <summary>When this version was registered.</summary>
     public DateTimeOffset RegisteredAt { get; set; }
+
+    /// <summary>
+    /// When this version was taken out of service, or null while it is still served.
+    /// <para>Retiring is how a minimum version gets set, and it is a withdrawal rather than a
+    /// deletion on purpose. The row stays, for two reasons: the history of what was once served is
+    /// worth keeping, and <c>ContractCompatibility.CheckAll</c> must still weigh a candidate against
+    /// it. A conversion chain that was invalid across a retired version does not become valid
+    /// because nobody speaks it any more — stored records written under it are still there.</para>
+    /// <para>What retiring does change is what is offered: a retired version disappears from
+    /// <c>AvailableVersions</c>, from negotiation and from <c>Describe</c>. A peer that can go no
+    /// higher than a retired version is refused and needs rebuilding, which is the honest outcome —
+    /// the alternative is handing it a newer document it has never been checked against.</para>
+    /// </summary>
+    public DateTimeOffset? RetiredAt { get; set; }
 }

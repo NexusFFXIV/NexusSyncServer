@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using NexusSyncServer.Hosting.Catalog;
 using NexusSyncServer.Hosting.Modules;
 using NexusSyncServer.Hosting.Persistence;
 
@@ -63,6 +64,19 @@ public sealed class AuthModule : IServerModule, IPortalPageModule
         services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
 
         services.AddSingleton<IEntityModule, AuthEntityModule>();
+
+        // The mapping above covers a database being created; this covers one that already exists.
+        // A new table needs both, and neither substitutes for the other.
+        services.AddSingleton<IMigrationModule, AuthMigrations>();
+
+        services.AddScoped<IKeyContractStateWriter, KeyContractStateWriter>();
+
+        // Offered to whoever wants to show who is still on which version — today the registry's
+        // contracts page. Registered here rather than there so the dependency points one way: the
+        // module that owns the table provides, the module that renders consumes an interface from
+        // Hosting and never learns this module exists.
+        services.AddSingleton<IClientVersionReport, KeyContractStateReport>();
+
         services.AddScoped<IApiKeyIssuer, ApiKeyIssuer>();
         services.AddScoped<IAccountService, AccountService>();
         services.AddSingleton<IEndpointModule, SignInEndpoints>();
