@@ -1,9 +1,11 @@
 // Microsoft.AspNetCore.Builder carries the minimal-API Map* overloads. Without it the
 // compiler binds to the legacy RequestDelegate ones in Microsoft.AspNetCore.Routing and
 // rejects every handler here.
+using System.Data.Common;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NexusSyncServer.Hosting.Modules;
 using NexusSyncServer.Modules.Auth;
@@ -47,6 +49,8 @@ internal sealed class SyncEndpoints : IEndpointModule
         IApiKeyAuthenticator auth,
         IContractRegistry registry,
         IOptions<StorageOptions> storage,
+        IKeyContractStateWriter state,
+        ILoggerFactory logs,
         CancellationToken ct)
     {
         if (!SyncProtocolVersion.IsSupported(request.ProtocolVersion))
@@ -62,7 +66,7 @@ internal sealed class SyncEndpoints : IEndpointModule
         if (known.Count == 0) return ProblemResults.UnknownContract(request.ContractId, known);
 
         var negotiated = registry.Negotiate(request.ContractId, request.Version);
-        if (negotiated is null) return ProblemResults.ContractMismatch(request.ContractId, request.Version, known);
+        if (negotiated is null) return NoVersionFor(registry, request.ContractId, request.Version, known);
 
         // The key's scopes intersected with what the contract actually declares. A key may
         // legitimately carry fewer; it must never carry more than the contract can express.
@@ -76,6 +80,28 @@ internal sealed class SyncEndpoints : IEndpointModule
             storage.Value.MaxRecordsPerPush,
             storage.Value.MaxPayloadBytes,
             storage.Value.MaxRecordsPerPull);
+
+        // A write on the hottest path, which the handshake did not have before. It is one upsert
+        // per handshake, and it buys the only view an operator has of who is still on what.
+        //
+        // Never fatal: this is bookkeeping, and a peer that can be served must be served even if
+        // recording the fact fails. A handshake refused because a report table was unavailable
+        // would be an outage caused entirely by observability.
+        try
+        {
+            await state.RecordAsync(
+                caller.Caller.KeyRowId,
+                request.ContractId,
+                negotiated.Version,
+                request.SupportedVersion,
+                ct).ConfigureAwait(false);
+        }
+        catch (DbException ex)
+        {
+            logs.CreateLogger("NexusSyncServer.Modules.Api.Handshake").LogWarning(
+                ex, "Could not record handshake state for key {KeyId} on {Contract}",
+                caller.Caller.KeyId, request.ContractId);
+        }
 
         return Results.Ok(new HandshakeResult(
             negotiated.Version,
@@ -227,6 +253,26 @@ internal sealed class SyncEndpoints : IEndpointModule
         IResult? Problem);
 
     /// <summary>
+    /// Tells the two ways negotiation can come up empty apart, because they need different answers.
+    /// <para>If the major is served but every remaining version of it is newer than the peer's, the
+    /// peer is below the minimum: no renegotiation reaches it and the build has to be updated. If
+    /// the major is not served at all, that is the ordinary mismatch. Collapsing both into
+    /// "mismatch" would tell an author to check their version number when the actual instruction is
+    /// to ship a new release.</para>
+    /// </summary>
+    private static IResult NoVersionFor(
+        IContractRegistry registry,
+        string contractId,
+        ContractVersion wanted,
+        IReadOnlyList<ContractVersion> known)
+    {
+        if (registry.MinimumServed(contractId, wanted.Major) is { } minimum)
+            return ProblemResults.ContractTooOld(contractId, wanted, minimum, known);
+
+        return ProblemResults.ContractMismatch(contractId, wanted, known);
+    }
+
+    /// <summary>
     /// The checks every data operation shares: authenticate, confirm the key may touch this
     /// contract, negotiate the version, find the collection, and confirm the direction.
     /// <para>Shared so the order cannot drift between push and pull — a scope check that ran
@@ -254,7 +300,7 @@ internal sealed class SyncEndpoints : IEndpointModule
 
         var contract = registry.Negotiate(contractId, version);
         if (contract is null)
-            return new Resolved(null, null, ProblemResults.ContractMismatch(contractId, version, known));
+            return new Resolved(null, null, NoVersionFor(registry, contractId, version, known));
 
         var collection = contract.FindCollection(collectionName);
         if (collection is null)

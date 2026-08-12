@@ -11,7 +11,9 @@ namespace NexusSyncServer.Modules.Auth;
 /// <inheritdoc />
 public sealed class ApiKeyAuthenticator : IApiKeyAuthenticator
 {
-    private sealed record CacheEntry(AuthenticatedCaller Caller, Guid KeyRowId, DateTimeOffset Until);
+    // The row id used to live here alongside the caller, set to Guid.Empty and never read. It is
+    // on the caller itself now, so a cache hit carries it too rather than losing it.
+    private sealed record CacheEntry(AuthenticatedCaller Caller, DateTimeOffset Until);
 
     private readonly IServiceScopeFactory mScopes;
     private readonly AuthOptions mOptions;
@@ -51,7 +53,7 @@ public sealed class ApiKeyAuthenticator : IApiKeyAuthenticator
         var resolved = await ResolveAsync(presentedKey!, hash, clientAgent, now, ct).ConfigureAwait(false);
         if (!resolved.Succeeded) return resolved;
 
-        mCache[hash] = new CacheEntry(resolved.Caller!, Guid.Empty, now + mOptions.ValidationCacheLifetime);
+        mCache[hash] = new CacheEntry(resolved.Caller!, now + mOptions.ValidationCacheLifetime);
 
         return CheckRate(resolved.Caller!)
             ? resolved
@@ -97,6 +99,7 @@ public sealed class ApiKeyAuthenticator : IApiKeyAuthenticator
         return AuthResult.Success(new AuthenticatedCaller(
             account.Id,
             key.KeyId,
+            key.Id,
             key.ContractId,
             key.Scopes.ToHashSet(StringComparer.Ordinal),
             account.IsOperator));

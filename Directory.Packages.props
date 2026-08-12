@@ -45,7 +45,7 @@
          CI takes the newest published package.
          Do not let a bump turn it into an exact pin — a pinned protocol package is how a
          server ends up unable to serve clients that have moved on. -->
-    <PackageVersion Include="NexusKit.Sync" Version="[0.5.1,)" />
+    <PackageVersion Include="NexusKit.Sync" Version="[0.6.0,)" />
   </ItemGroup>
 
   <ItemGroup>

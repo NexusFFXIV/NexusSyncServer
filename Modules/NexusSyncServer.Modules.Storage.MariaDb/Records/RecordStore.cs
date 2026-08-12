@@ -124,6 +124,77 @@ public sealed class RecordStore : IRecordStore
     }
 
     /// <inheritdoc />
+    public async Task<NarrowingScan> ScanFieldAsync(
+        string contractId,
+        string collection,
+        FieldDefinition from,
+        FieldDefinition to,
+        int rowLimit,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+
+        const int SampleCap = 10;
+        const int PageSize = 500;
+
+        var live = mDb.Set<RecordEntity>()
+            .AsNoTracking()
+            .Where(r => r.ContractId == contractId && r.Collection == collection && !r.Deleted && r.Payload != null);
+
+        var total = await live.LongCountAsync(ct).ConfigureAwait(false);
+
+        var cap = rowLimit > 0 ? rowLimit : long.MaxValue;
+        var samples = new List<string>(SampleCap);
+        long scanned = 0;
+        long blocking = 0;
+        long cursor = 0;
+
+        // Paged on the sequence rather than read whole. The scan exists to answer a question about
+        // a table that may be large, and materialising it to answer that would be its own outage.
+        while (scanned < cap)
+        {
+            var take = (int)Math.Min(PageSize, cap - scanned);
+
+            var page = await live
+                .Where(r => r.Seq > cursor)
+                .OrderBy(r => r.Seq)
+                .Take(take)
+                .Select(r => new { r.Seq, r.Key, r.Payload })
+                .ToListAsync(ct).ConfigureAwait(false);
+
+            if (page.Count == 0) break;
+
+            foreach (var row in page)
+            {
+                scanned++;
+                cursor = row.Seq;
+
+                using var document = JsonDocument.Parse(row.Payload!);
+
+                // Absent or null is not a conversion failure. It was legal before and stays legal;
+                // whether the field may be absent at all is the required-field rule, judged
+                // elsewhere and against the declaration rather than against the data.
+                //
+                // Read under the old name: a rename is not a conversion, and a field that changed
+                // name has no stored values to carry over.
+                if (!document.RootElement.TryGetProperty(from.Name, out var value)) continue;
+                if (value.ValueKind == JsonValueKind.Null) continue;
+
+                // Re-expressed in the new shape, then judged by the write path's own rules.
+                if (FieldValueConversion.Check(from, to, value).IsValid) continue;
+
+                blocking++;
+                if (samples.Count < SampleCap) samples.Add(row.Key);
+            }
+
+            if (page.Count < take) break;
+        }
+
+        return new NarrowingScan(total, scanned, blocking, samples, Truncated: scanned < total);
+    }
+
+    /// <inheritdoc />
     public async Task EnsureIndexesAsync(string contractId, CollectionDefinition collection, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(collection);

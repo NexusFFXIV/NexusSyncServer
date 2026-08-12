@@ -13,20 +13,51 @@ WORKDIR /src
 # worth a failure mode that looks like a routing bug.
 COPY . .
 
-# Two ways to satisfy NexusKit.Sync, both supported here:
+# Where NexusKit.Sync comes from. Two ways, and the default is the one CI uses — a build with
+# no flag set has to be the shippable one, because that is the build nobody stops to think about.
 #
-#   local   — ./local-packages holds a .nupkg produced by scripts/pack-local-deps.ps1.
-#             This is the development loop, and the only way to build before the package is
-#             first published.
-#   feed    — GitHub Packages, for CI and for anyone building from a tag. Needs credentials,
-#             passed as a BuildKit secret rather than a build arg so the token never lands in
-#             an image layer or in `docker history`.
+#   feed  (default) — GitHub Packages, for CI and for anyone building from a tag. Needs
+#                     credentials, passed as a BuildKit secret rather than a build arg so the
+#                     token never lands in an image layer or in `docker history`.
+#   local           — ./localdev holds a .nupkg produced by localdev/pack-local-deps.ps1, and
+#                     the package sources pointing at it. The development loop, and the only way
+#                     to build against a NexusKit.Sync change that is not published yet — which,
+#                     while it is being written, is every change. See localdev/README.md.
 #
-# Over ./nuget.config, not into the user profile. The repository's own file sits in the working
-# directory and wins there, and its credential is a %GITHUB_PACKAGES_PAT% placeholder that
-# nothing sets inside a container — left in place it answers 401 whatever the profile says.
-# Replacing it is the only arrangement where the mounted secret actually takes effect.
-RUN --mount=type=secret,id=nuget_auth,required=false     if [ -f /run/secrets/nuget_auth ]; then         cp /run/secrets/nuget_auth ./nuget.config;     fi;     dotnet restore NexusSyncServer.sln
+# Either way the chosen file lands over ./nuget.config rather than in the user profile. The
+# repository's own file sits in the working directory and wins there, and its credential is a
+# %GITHUB_PACKAGES_PAT% placeholder that nothing sets inside a container — left in place it
+# answers 401 whatever else is configured.
+# Backslash continuations rather than a heredoc, and not by preference: this file has CRLF
+# endings and no .gitattributes normalises them, so a heredoc would hand /bin/sh a script with a
+# carriage return on every line and fail in CI exactly as it does here. Docker strips the CR when
+# it joins continued lines, which is why this shape survives and that one does not.
+#
+# On DEPS=local the missing pieces are refused rather than fallen back on. Without the folder
+# source, restore would reach the GitHub feed and build against the published package —
+# succeeding, and testing the wrong code. A local build that silently is not local is worse than
+# one that stops.
+ARG DEPS=feed
+RUN --mount=type=secret,id=nuget_auth,required=false set -eu; \
+    case "${DEPS}" in \
+      feed) \
+        if [ -f /run/secrets/nuget_auth ]; then cp /run/secrets/nuget_auth ./nuget.config; fi ;; \
+      local) \
+        if [ ! -f localdev/nuget.local.config ]; then \
+          echo "DEPS=local needs localdev/nuget.local.config, missing from the build context." >&2; \
+          exit 1; \
+        fi; \
+        if ! ls localdev/packages/NexusKit.Sync.*.nupkg >/dev/null 2>&1; then \
+          echo "DEPS=local needs ./localdev/packages/NexusKit.Sync.*.nupkg." >&2; \
+          echo "Run localdev/pack-local-deps.ps1 first, then rebuild." >&2; \
+          exit 1; \
+        fi; \
+        cp localdev/nuget.local.config ./nuget.config ;; \
+      *) \
+        echo "DEPS must be 'feed' or 'local', got '${DEPS}'." >&2; \
+        exit 1 ;; \
+    esac; \
+    dotnet restore NexusSyncServer.sln
 
 # Version comes from outside because .git is not in the build context, so MinVer has no tags
 # to read. CI passes the release tag; a local build gets a clearly-local default rather than a

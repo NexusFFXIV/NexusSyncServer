@@ -26,4 +26,23 @@ public sealed class RegistryOptions
     /// than an outage for everybody.</para>
     /// </summary>
     public bool FailOnInvalidContract { get; set; }
+
+    /// <summary>
+    /// Whether a narrowing type change should be refused when stored records would not survive it.
+    /// <para>Default false, matching <see cref="FailOnInvalidContract"/>: the scan always runs and
+    /// always reports, but by default it warns rather than blocks. Narrowing is a deliberate choice
+    /// an operator makes about their own data, and the point of the check is that the cost is
+    /// visible <i>before</i> the change lands, not that the server second-guesses the decision.
+    /// Turn this on where a bad row must stop a deployment instead of appearing in a log.</para>
+    /// </summary>
+    public bool BlockNarrowingWithBadData { get; set; }
+
+    /// <summary>
+    /// How many records to read per narrowing check. Zero means every one.
+    /// <para>The scan reads payloads, so on a large collection it is not free. The cap keeps a
+    /// registration from stalling startup; what it never does is turn a partial scan into a clean
+    /// bill of health — a truncated scan is reported as truncated, with the numbers, so nobody reads
+    /// "no problems found" as "no problems exist".</para>
+    /// </summary>
+    public int NarrowingScanLimit { get; set; } = 50_000;
 }

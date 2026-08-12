@@ -95,6 +95,42 @@ public sealed class AuthEntityModule : IEntityModule
                 .HasForeignKey(x => x.AccountId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        ConfigureKeyContractState(modelBuilder);
+    }
+
+    /// <summary>
+    /// Maps the per-key, per-contract state. Split out because it is about usage rather than
+    /// identity, and the two are read by different things for different reasons.
+    /// </summary>
+    private static void ConfigureKeyContractState(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<KeyContractStateEntity>(e =>
+        {
+            e.ToTable("key_contract_state");
+
+            // The pair, because a key may span contracts — see the entity for what a single
+            // column on the key row would get wrong.
+            e.HasKey(x => new { x.KeyId, x.ContractId });
+
+            e.Property(x => x.KeyId).HasColumnName("key_id");
+            e.Property(x => x.ContractId).HasColumnName("contract_id").HasMaxLength(128);
+            e.Property(x => x.NegotiatedMajor).HasColumnName("negotiated_major");
+            e.Property(x => x.NegotiatedMinor).HasColumnName("negotiated_minor");
+            e.Property(x => x.SupportedMajor).HasColumnName("supported_major");
+            e.Property(x => x.SupportedMinor).HasColumnName("supported_minor");
+            e.Property(x => x.LastSeenAt).HasColumnName("last_seen_at");
+
+            // Cascading: this is a record of what a key did, so revoking and deleting the key
+            // takes it with them. Nothing here outlives its subject.
+            e.HasOne<ApiKeyEntity>()
+                .WithMany()
+                .HasForeignKey(x => x.KeyId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The portal groups by contract and version across every key.
+            e.HasIndex(x => x.ContractId).HasDatabaseName("ix_key_contract_state_contract");
+        });
     }
 
     private static readonly ValueConverter<List<string>, string> ScopeConverter = new(
