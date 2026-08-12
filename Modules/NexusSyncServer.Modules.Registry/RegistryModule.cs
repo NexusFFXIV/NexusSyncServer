@@ -42,6 +42,10 @@ public sealed class RegistryModule : IServerModule, IPortalPageModule
 
         services.AddSingleton<IEntityModule, RegistryEntityModule>();
 
+        // The mapping above covers a database being created; this covers one that already exists.
+        // A new column needs both, and neither substitutes for the other.
+        services.AddSingleton<IMigrationModule, RegistryMigrations>();
+
         // Singleton because the snapshot it holds is the point — a scoped registry would
         // rebuild or re-query per request, which is exactly what the cache exists to avoid.
         services.AddSingleton<IContractRegistry, ContractRegistry>();

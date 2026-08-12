@@ -28,6 +28,7 @@ public sealed class RegistryEntityModule : IEntityModule
             e.Property(x => x.CanonicalJson).HasColumnName("canonical_json");
             e.Property(x => x.Hash).HasColumnName("hash").HasMaxLength(64);
             e.Property(x => x.RegisteredAt).HasColumnName("registered_at");
+            e.Property(x => x.RetiredAt).HasColumnName("retired_at");
 
             // Negotiation always asks "highest minor for this id and major".
             e.HasIndex(x => new { x.ContractId, x.Major, x.Minor }).HasDatabaseName("ix_contracts_negotiate");

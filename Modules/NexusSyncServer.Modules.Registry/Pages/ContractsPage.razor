@@ -15,8 +15,12 @@
 @namespace NexusSyncServer.Modules.Registry.Pages
 @using Microsoft.AspNetCore.Authorization
 @using NexusKit.Sync.Contracts
+@using NexusSyncServer.Hosting.Catalog
 @attribute [Authorize]
 @inject IContractRegistry Registry
+@* Resolved rather than injected: a server composed without the auth module has no report, and
+   the section simply does not appear. Same posture as the scope catalogue. *@
+@inject IServiceProvider Services
 
 <PageTitle>Contracts</PageTitle>
 
@@ -26,6 +30,11 @@
         What each contract declares, and the hash both sides check against. A plugin reads the
         same thing over the API with a key carrying <code class="nx-mono">contract:pull</code>.
     </p>
+
+    @if (Problem is { Length: > 0 } problem)
+    {
+        <p class="nx-error">@problem</p>
+    }
 
     @if (Registry.ContractIds.Count == 0)
     {
@@ -37,7 +46,52 @@
 
     @foreach (var contractId in Registry.ContractIds)
     {
-        @foreach (var version in Registry.VersionsOf(contractId))
+        var served = Registry.VersionsOf(contractId);
+        var highest = served.Count > 0 ? served[^1] : (ContractVersion?)null;
+
+        @if (Report is not null)
+        {
+            <h3>@contractId <span class="nx-muted">— who is on what</span></h3>
+            <table class="nx-table">
+                <thead><tr><th>Version</th><th>Clients</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                @foreach (var version in Registry.AllVersionsOf(contractId).Reverse())
+                {
+                    var retired = Registry.IsRetired(contractId, version);
+                    var usage = UsageFor(contractId, version);
+                    var clients = usage?.Clients ?? 0;
+
+                    <tr>
+                        <td class="nx-mono">@version</td>
+                        <td>@clients</td>
+                        <td class="nx-muted">@Status(contractId, version, highest, retired, usage, clients)</td>
+                        <td>
+                            @if (IsOperator)
+                            {
+                                <form method="post"
+                                      @formname="@($"retire-{contractId}-{version}")"
+                                      @onsubmit="() => SetRetiredAsync(contractId, version, !retired)">
+                                    <AntiforgeryToken />
+                                    <button type="submit" class="@(retired ? "nx-btn" : "nx-btn nx-btn-danger")">
+                                        @(retired ? "Return to service" : "Retire")
+                                    </button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p class="nx-muted">
+                Retiring withdraws a version without deleting it: peers stop being offered it, the
+                document stays registered for the compatibility history, and a peer that can go no
+                higher is refused and needs rebuilding. Reasons are <em>computed</em> from the two
+                documents and the keys' scopes — exact for peers that took the server's document,
+                approximate for one carrying its own.
+            </p>
+        }
+
+        @foreach (var version in Registry.AllVersionsOf(contractId))
         {
             var contract = Registry.Find(contractId, version);
             if (contract is null) continue;
@@ -47,6 +101,7 @@
                     <strong class="nx-mono">@contractId</strong>
                     <span class="nx-muted">
                         @version · @contract.Collections.Count collection@(contract.Collections.Count == 1 ? "" : "s")
+                        @(Registry.IsRetired(contractId, version) ? " · retired" : "")
                     </span>
                 </summary>
 
@@ -89,6 +144,106 @@
 </div>
 
 @code {
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    private IReadOnlyList<ContractVersionUsage> Usage { get; set; } = [];
+    private IClientVersionReport? Report { get; set; }
+    private string? Problem { get; set; }
+
+    private bool IsOperator => Http?.User.IsInRole("operator") ?? false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Report = Services.GetService<IClientVersionReport>();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (Report is null) return;
+
+        Usage = await Report.UsageAsync(CancellationToken.None);
+    }
+
+    private ContractVersionUsage? UsageFor(string contractId, ContractVersion version) =>
+        Usage.FirstOrDefault(u =>
+            string.Equals(u.ContractId, contractId, StringComparison.Ordinal)
+            && u.Major == version.Major
+            && u.Minor == version.Minor);
+
+    /// <summary>
+    /// Why this version still has peers on it — the sentence that decides whether it can go.
+    /// <para>Three different answers, and conflating them is exactly what made this guesswork
+    /// before: nobody is on it, somebody is on it but has not moved up yet, or somebody is on it
+    /// because the newer one would break them.</para>
+    /// </summary>
+    private string Status(
+        string contractId,
+        ContractVersion version,
+        ContractVersion? highest,
+        bool retired,
+        ContractVersionUsage? usage,
+        int clients)
+    {
+        if (retired) return "retired — no longer offered";
+        if (highest is null || version >= highest.Value) return "current";
+        if (clients == 0) return "nobody is on it — safe to retire";
+
+        // Reported a ceiling above this version: they can move and simply have not. Nothing is
+        // blocking them, so this version goes away on its own once they reconnect.
+        if (usage is { CouldGoHigher: > 0 } able)
+        {
+            var rest = clients - able.CouldGoHigher;
+            var tail = rest > 0 ? $", {rest} did not say" : string.Empty;
+
+            return $"{able.CouldGoHigher} could move up but have not yet{tail}";
+        }
+
+        var mine = Registry.Find(contractId, version);
+        var theirs = Registry.Find(contractId, highest.Value);
+        if (mine is null || theirs is null) return "held back";
+
+        // The same rule the client applied to arrive here, asked from this side. The scopes are
+        // the union across the keys on this row — see IClientVersionReport for why that errs
+        // toward "held back" rather than away from it.
+        var scopes = usage is null
+            ? new HashSet<string>(ContractScopes.All(mine), StringComparer.Ordinal)
+            : new HashSet<string>(usage.Scopes, StringComparer.Ordinal);
+
+        var support = ClientSupport.Evaluate(mine, theirs, scopes);
+
+        return support.IsSupported
+            ? $"could move to {highest.Value} — no reported ceiling"
+            : $"blocked on {highest.Value}: {support}";
+    }
+
+    private async Task SetRetiredAsync(string contractId, ContractVersion version, bool retired)
+    {
+        Problem = null;
+
+        if (!IsOperator)
+        {
+            // The button is not rendered for anyone else, but a post is not a button — the
+            // check that matters is the one on the handler.
+            Problem = "Only an operator may retire a contract version.";
+            return;
+        }
+
+        if (retired && Registry.VersionsOf(contractId).Count <= 1)
+        {
+            // Retiring the last served version would leave the contract registered but
+            // unusable, and every peer refused with no version to move to.
+            Problem = $"{contractId} {version} is the only version still served; retiring it would "
+                      + "leave the contract unusable. Register a newer one first.";
+            return;
+        }
+
+        if (!await Registry.SetRetiredAsync(contractId, version, retired, CancellationToken.None))
+            Problem = $"{contractId} {version} is not registered.";
+
+        await LoadAsync();
+    }
+
     /// <summary>The declared constraints, or a dash when a field has none.</summary>
     private static string Rules(FieldDefinition field)
     {

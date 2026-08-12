@@ -36,7 +36,7 @@ mariadb-data/
 
 # Locally packed dependencies for the container build (scripts/pack-local-deps.ps1).
 # Entirely ignored: these are build artefacts, and NuGet tolerates the folder not existing.
-local-packages/
+localdev/packages/
 
 # Local credential mount. Entirely ignored, and nothing is committed to make it exist —
 # a folder whose whole purpose is to hold secrets has no business being tracked at all.

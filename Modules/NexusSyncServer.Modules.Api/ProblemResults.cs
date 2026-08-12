@@ -57,6 +57,22 @@ internal static class ProblemResults
             ["serverVersions"] = known.Select(v => v.ToString()).ToArray(),
         });
 
+    public static IResult ContractTooOld(
+        string contractId,
+        ContractVersion wanted,
+        ContractVersion minimum,
+        IReadOnlyList<ContractVersion> served) => Build(
+        SyncProblemType.ContractTooOld,
+        "Contract version no longer served",
+        StatusCodes.Status409Conflict,
+        $"{contractId} {wanted} is no longer served. The minimum is {minimum}. This peer cannot be "
+        + "served by renegotiating and needs updating.",
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["minimumVersion"] = minimum.ToString(),
+            ["serverVersions"] = served.Select(v => v.ToString()).ToArray(),
+        });
+
     public static IResult ContractMismatch(
         string contractId,
         ContractVersion wanted,

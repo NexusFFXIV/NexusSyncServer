@@ -5,12 +5,20 @@ namespace NexusSyncServer.Modules.Auth;
 /// </summary>
 /// <param name="AccountId">The owning account, recorded against anything they write.</param>
 /// <param name="KeyId">The key prefix, for the audit log. Never the key itself.</param>
+/// <param name="KeyRowId">
+/// The key's row identity.
+/// <para>Distinct from <paramref name="KeyId"/>, which is the eight-character prefix and is
+/// deliberately <b>not unique</b> — prefixes can collide by chance and the hash is what decides.
+/// Anything recorded per key has to hang off this instead, or two keys that happen to share a
+/// prefix would silently share a row.</para>
+/// </param>
 /// <param name="ContractId">The contract the key is limited to, or null for any.</param>
 /// <param name="Scopes">The scopes this key carries.</param>
 /// <param name="IsOperator">Whether the account may register contracts and administer others.</param>
 public sealed record AuthenticatedCaller(
     Guid AccountId,
     string KeyId,
+    Guid KeyRowId,
     string? ContractId,
     IReadOnlySet<string> Scopes,
     bool IsOperator)
