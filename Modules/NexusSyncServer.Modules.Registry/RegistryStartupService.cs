@@ -39,10 +39,59 @@ internal sealed class RegistryStartupService : IHostedService
             return;
         }
 
-        foreach (var path in Directory.EnumerateFiles(directory, "*.json").OrderBy(p => p, StringComparer.Ordinal))
+        var documents = Directory.EnumerateFiles(directory, "*.json")
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var path in documents)
             await LoadAsync(path, cancellationToken).ConfigureAwait(false);
 
         mLog.LogInformation("Registry ready with {Count} contract(s).", mRegistry.ContractIds.Count);
+
+        WarnAboutOrphans(documents, cancellationToken);
+    }
+
+    /// <summary>
+    /// Names registered contracts that no document backs any more.
+    /// <para>The directory delivers contracts; it does not mirror them. A contract is the
+    /// promise a client is already sending data under, and records in storage refer to it —
+    /// so a file that disappears must not take the registration with it. A mistyped mount
+    /// path would otherwise retire every contract on the server, and Docker creates a missing
+    /// bind-mount source as an empty directory without complaining.</para>
+    /// <para>What was missing is not the removal but the notice. Starting with "ready with 2
+    /// contract(s)" while the directory is empty invites exactly the conclusion that something
+    /// is broken, and leaves the operator to reconstruct the truth from the database.</para>
+    /// </summary>
+    private void WarnAboutOrphans(IReadOnlyList<string> documents, CancellationToken ct)
+    {
+        if (mRegistry.ContractIds.Count == 0) return;
+
+        var onDisk = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var path in documents)
+        {
+            try
+            {
+                onDisk.Add(ContractJson.Parse(File.ReadAllText(path)).ContractId);
+            }
+            catch (Exception ex) when (ex is IOException or ContractDefinitionException)
+            {
+                // Already reported by LoadAsync. Counting it as absent here would produce a
+                // second complaint about the same file, worded as if it were a different fault.
+            }
+        }
+
+        var orphans = mRegistry.ContractIds.Where(id => !onDisk.Contains(id)).ToArray();
+        if (orphans.Length == 0) return;
+
+        mLog.LogWarning(
+            "{Count} registered contract(s) have no document in {Directory}: {Contracts}. "
+            + "They stay registered and served — clients built against them keep working, and "
+            + "their stored records keep their meaning. Delete the rows from registry_contracts "
+            + "to retire one.",
+            orphans.Length,
+            mOptions.ContractsDirectory,
+            string.Join(", ", orphans));
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
