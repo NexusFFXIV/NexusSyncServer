@@ -18,8 +18,8 @@
     <!-- Keep EF Core and Microsoft.Extensions.* on one version. EF Core pulls specific
          Microsoft.Extensions.* versions transitively, and a split between the two families
          is exactly what produces NU1605. -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
   </ItemGroup>
