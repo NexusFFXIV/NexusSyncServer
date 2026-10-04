@@ -1,5 +1,4 @@
 <Project>
-
   <!-- Central Package Management: every NuGet version for this repo lives here, and the
        csprojs carry bare <PackageReference Include="..."/> only.
 
@@ -9,21 +8,18 @@
        version while another moved is enough to fail the build with NU1605 (package
        downgrade, escalated to an error by TreatWarningsAsErrors). One file means a version
        can only move everywhere at once. -->
-
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-
   <ItemGroup>
     <!-- Keep EF Core and Microsoft.Extensions.* on one version. EF Core pulls specific
          Microsoft.Extensions.* versions transitively, and a split between the two families
          is exactly what produces NU1605. -->
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
   </ItemGroup>
-
   <ItemGroup>
     <!-- MariaDB provider. Tracks EF Core's major but has its own patch cadence, so the
          patch number will not match Microsoft.EntityFrameworkCore above — that is expected
@@ -35,7 +31,6 @@
          see the module README for what was tested and what MariaDB-only SQL it relies on. -->
     <PackageVersion Include="MySql.EntityFrameworkCore" Version="10.0.9" />
   </ItemGroup>
-
   <ItemGroup>
     <!-- The sync norm, shared with the plugin side. 0.5.1 is the release it first shipped in;
          a floor naming an earlier one restores the substitute and fails on NU1603, which
@@ -47,9 +42,7 @@
          server ends up unable to serve clients that have moved on. -->
     <PackageVersion Include="NexusKit.Sync" Version="[0.6.0,)" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageVersion Include="MinVer" Version="8.0.0" />
   </ItemGroup>
-
 </Project>
