@@ -49,3 +49,4 @@ secrets/
 # Operator compose for the published image. Names ports and a contracts path that belong to
 # one machine; a committed copy is one somebody edits locally and pushes back by accident.
 docker-compose.ghcr.yml
+.helper/
