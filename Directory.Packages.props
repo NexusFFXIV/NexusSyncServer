@@ -29,7 +29,7 @@
          Pomelo stops at EF Core 9 and this repo is on 10. Oracle's targets MySQL and does
          not claim MariaDB support, so the combination is verified rather than assumed —
          see the module README for what was tested and what MariaDB-only SQL it relies on. -->
-    <PackageVersion Include="MySql.EntityFrameworkCore" Version="10.0.9" />
+    <PackageVersion Include="MySql.EntityFrameworkCore" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>
     <!-- The sync norm, shared with the plugin side. 0.5.1 is the release it first shipped in;
